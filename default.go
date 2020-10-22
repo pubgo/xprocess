@@ -3,7 +3,10 @@ package xprocess
 import (
 	"context"
 	"encoding/json"
+	"github.com/pubgo/xerror"
+	"github.com/pubgo/xerror/xerror_util"
 	"go.uber.org/atomic"
+	"reflect"
 )
 
 var defaultProcess = &process{}
@@ -19,9 +22,9 @@ func GoLoop(fn func(ctx context.Context) error) func() error {
 func Stack() string {
 	var _data = make(map[string]int32)
 	data.Range(func(key, value interface{}) bool {
-		_data[key.(string)] = value.(*atomic.Int32).Load()
+		_data[xerror_util.CallerWithFunc(key.(reflect.Value).Interface())] = value.(*atomic.Int32).Load()
 		return true
 	})
-	b, _ := json.Marshal(_data)
-	return string(b)
+	dt := xerror.PanicBytes(json.Marshal(_data))
+	return string(dt)
 }

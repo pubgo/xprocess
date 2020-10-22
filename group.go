@@ -3,35 +3,43 @@ package xprocess
 import (
 	"context"
 	"github.com/pubgo/xerror"
-	"github.com/pubgo/xerror/xerror_util"
 	"go.uber.org/atomic"
+	"reflect"
 
 	"sync"
 )
 
 type group struct {
 	ctx    context.Context
-	Cancel func()
+	cancel func()
 	wg     sync.WaitGroup
 	err    atomic.Error
 }
 
-func NewGroup(ctx context.Context) *group {
+func NewGroup(contexts ...context.Context) *group {
+	var ctx = context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
 	if ctx == nil {
-		ctx = context.Background()
+		xerror.Exit(xerror.New("Context is nil"))
 	}
 
 	_ctx, cancel := context.WithCancel(ctx)
-	return &group{ctx: _ctx, Cancel: cancel}
+	return &group{ctx: _ctx, cancel: cancel}
 }
 
 func (g *group) Err() error {
 	return g.err.Load()
 }
 
+func (g *group) Cancel() {
+	g.cancel()
+}
+
 func (g *group) Wait() {
 	g.wg.Wait()
-	g.Cancel()
+	g.cancel()
 }
 
 func (g *group) Go(fn func(ctx context.Context) error) {
@@ -44,7 +52,7 @@ func (g *group) Go(fn func(ctx context.Context) error) {
 	}
 
 	g.wg.Add(1)
-	actual, _ := data.LoadOrStore(xerror_util.CallerWithFunc(fn), atomic.NewInt32(0))
+	actual, _ := data.LoadOrStore(reflect.ValueOf(fn), atomic.NewInt32(0))
 	actual.(*atomic.Int32).Inc()
 
 	go func() {

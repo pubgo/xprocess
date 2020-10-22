@@ -17,16 +17,16 @@ func TestCancel(t *testing.T) {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				time.Sleep(time.Second)
+				time.Sleep(time.Millisecond * 100)
 				fmt.Println("g1")
 			}
 		}
 	})
 
-	time.Sleep(time.Second*5)
+	time.Sleep(time.Second)
 	fmt.Println(xprocess.Stack())
 	fmt.Println(cancel())
-	time.Sleep(time.Millisecond*10)
+	time.Sleep(time.Second)
 	fmt.Println(xprocess.Stack())
 }
 func TestName(t *testing.T) {
@@ -43,7 +43,7 @@ func TestName(t *testing.T) {
 			return ctx.Err()
 		})
 
-		g := xprocess.NewGroup(nil)
+		g := xprocess.NewGroup()
 		g.Go(func(ctx context.Context) error {
 			fmt.Println("g4")
 			return nil
@@ -58,6 +58,8 @@ func TestName(t *testing.T) {
 		})
 		g.Wait()
 		fmt.Println(g.Err())
+
+		g.Cancel()
 
 		fmt.Println(xprocess.Stack())
 		time.Sleep(time.Second)
