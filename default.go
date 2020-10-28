@@ -3,22 +3,37 @@ package xprocess
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"time"
+
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_util"
 	"go.uber.org/atomic"
-	"reflect"
 )
 
 var defaultProcess = &process{}
 
+// Go
+// 启动一个goroutine
 func Go(fn func(ctx context.Context) error) func() error {
 	return defaultProcess.goCtx(fn)
 }
 
+// GoLoop
+// 启动一个goroutine loop
+// 是为了替换 `go func() {for{ }}()` 这类的代码
 func GoLoop(fn func(ctx context.Context) error) func() error {
 	return defaultProcess.goLoopCtx(fn)
 }
 
+// Timeout
+// 执行超时函数, 超时后, 函数自动退出
+func Timeout(dur time.Duration, fn func(ctx context.Context) error) error {
+	return defaultProcess.goWithTimeout(dur, fn)
+}
+
+// Stack
+// 获取正在运行的goroutine的stack和数量
 func Stack() string {
 	var _data = make(map[string]int32)
 	data.Range(func(key, value interface{}) bool {
