@@ -2,85 +2,78 @@ package xprocess
 
 import (
 	"context"
-	"github.com/pubgo/xerror"
-	"go.uber.org/atomic"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/pubgo/xerror"
+	"github.com/pubgo/xlog"
+	"go.uber.org/atomic"
 )
+
+var ErrTimeout = xerror.New("timeout")
 
 var data sync.Map
 
 func dataCounter(fn interface{}) func() {
 	actual, _ := data.LoadOrStore(reflect.ValueOf(fn), atomic.NewInt32(0))
 	actual.(*atomic.Int32).Inc()
-	return func() {
-		actual.(*atomic.Int32).Dec()
-	}
+	return func() { actual.(*atomic.Int32).Dec() }
 }
 
 type process struct{}
 
-func (t *process) goCtx(fn func(ctx context.Context) error) func() error {
+func (t *process) goCtx(fn func(ctx context.Context)) context.CancelFunc {
 	if fn == nil {
-		return func() error {
-			return nil
-		}
+		return func() { return }
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	var err error
-	var counter = dataCounter(fn)
 	go func() {
+		var counter = dataCounter(fn)
 		defer func() {
-			xerror.RespErr(&err)
 			counter()
 			cancel()
 		}()
 
-		err = fn(ctx)
+		defer xerror.Resp(func(err xerror.XErr) {
+			xlog.Error("process.goCtx handle error", xlog.String("err", err.Stack()))
+		})
+
+		fn(ctx)
 	}()
 
-	return func() error {
-		cancel()
-		return err
-	}
+	return cancel
 }
 
-func (t *process) goLoopCtx(fn func(ctx context.Context) error) func() error {
+func (t *process) goLoopCtx(fn func(ctx context.Context)) context.CancelFunc {
 	if fn == nil {
-		return func() error {
-			return nil
-		}
+		return func() { return }
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	var err error
 	var counter = dataCounter(fn)
 	go func() {
 		defer func() {
-			xerror.RespErr(&err)
 			counter()
 			cancel()
 		}()
+
+		defer xerror.Resp(func(err xerror.XErr) {
+			xlog.Error("process.goLoopCtx handle error", xlog.Any("err", err.Stack()))
+		})
 
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				if _err := fn(ctx); _err != nil {
-					err = _err
-					return
-				}
+				fn(ctx)
 			}
 		}
 	}()
 
-	return func() error {
-		cancel()
-		return err
-	}
+	return cancel
 }
 
 func (t *process) goWithTimeout(dur time.Duration, fn func(ctx context.Context) error) error {
@@ -96,23 +89,20 @@ func (t *process) goWithTimeout(dur time.Duration, fn func(ctx context.Context) 
 	defer cancel()
 
 	var ch = make(chan error, 1)
-	var counter = dataCounter(fn)
 	go func() {
+		var counter = dataCounter(fn)
 		defer func() {
-			xerror.Resp(func(err xerror.XErr) {
-				ch <- err
-			})
+			xerror.Resp(func(err xerror.XErr) { ch <- err })
 			counter()
 			cancel()
 		}()
-
 		ch <- fn(ctx)
 	}()
 
 	select {
 	case err := <-ch:
-		return err
+		return xerror.Wrap(err)
 	case <-time.After(dur):
-		return xerror.New("timeout")
+		return ErrTimeout
 	}
 }

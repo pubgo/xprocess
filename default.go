@@ -15,14 +15,14 @@ var defaultProcess = &process{}
 
 // Go
 // 启动一个goroutine
-func Go(fn func(ctx context.Context) error) func() error {
+func Go(fn func(ctx context.Context)) context.CancelFunc {
 	return defaultProcess.goCtx(fn)
 }
 
 // GoLoop
 // 启动一个goroutine loop
 // 是为了替换 `go func() {for{ }}()` 这类的代码
-func GoLoop(fn func(ctx context.Context) error) func() error {
+func GoLoop(fn func(ctx context.Context)) context.CancelFunc {
 	return defaultProcess.goLoopCtx(fn)
 }
 

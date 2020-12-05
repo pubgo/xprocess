@@ -11,7 +11,7 @@ import (
 type Group = group
 type group struct {
 	ctx    context.Context
-	cancel func()
+	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	err    atomic.Error
 }
@@ -25,7 +25,7 @@ func NewGroup(contexts ...context.Context) *group {
 	}
 
 	if ctx == nil {
-		xerror.Exit(xerror.New("[ctx] is nil"))
+		xerror.Exit(xerror.New("[ctx] should not be nil"))
 	}
 
 	_ctx, cancel := context.WithCancel(ctx)
@@ -62,17 +62,14 @@ func (g *group) Go(fn func(ctx context.Context) error) error {
 		return xerror.Wrap(err)
 	}
 
-	g.wg.Add(1)
-	var counter = dataCounter(fn)
 	go func() {
+		g.wg.Add(1)
+		var counter = dataCounter(fn)
 		defer func() {
-			xerror.Resp(func(err xerror.XErr) {
-				g.err.Store(err)
-			})
+			xerror.Resp(func(err xerror.XErr) { g.err.Store(err) })
 			g.wg.Done()
 			counter()
 		}()
-
 		g.err.Store(fn(g.ctx))
 	}()
 	return nil
