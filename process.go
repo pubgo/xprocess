@@ -37,7 +37,7 @@ func (t *process) goCtx(fn func(ctx context.Context)) context.CancelFunc {
 		}()
 
 		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Error("process.goCtx handle error", xlog.String("err", err.Stack()))
+			xlog.Error("process.goCtx handle error", xlog.Any("err", err))
 		})
 
 		fn(ctx)
@@ -60,7 +60,7 @@ func (t *process) goLoopCtx(fn func(ctx context.Context)) context.CancelFunc {
 		}()
 
 		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Error("process.goLoopCtx handle error", xlog.Any("err", err.Stack()))
+			xlog.Error("process.goLoopCtx handle error", xlog.Any("err", err))
 		})
 
 		for {
