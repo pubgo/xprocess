@@ -29,8 +29,8 @@ func (t *process) goCtx(fn func(ctx context.Context)) context.CancelFunc {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var counter = dataCounter(fn)
 	go func() {
-		var counter = dataCounter(fn)
 		defer func() {
 			counter()
 			cancel()
@@ -89,8 +89,8 @@ func (t *process) goWithTimeout(dur time.Duration, fn func(ctx context.Context) 
 	defer cancel()
 
 	var ch = make(chan error, 1)
+	var counter = dataCounter(fn)
 	go func() {
-		var counter = dataCounter(fn)
 		defer func() {
 			xerror.Resp(func(err xerror.XErr) { ch <- err })
 			counter()

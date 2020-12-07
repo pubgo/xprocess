@@ -48,23 +48,20 @@ func TestName(t *testing.T) {
 		})
 
 		g := xprocess.NewGroup()
-		xerror.Exit(g.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context)  {
 			fmt.Println("g4")
-			return nil
-		}))
+		})
 
-		xerror.Exit(g.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context) {
 			fmt.Println("g5")
-			return nil
-		}))
+		})
 
-		xerror.Exit(g.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context)  {
 			fmt.Println("g6")
-			return xerror.Fmt("test error")
-		}))
+			xerror.Panic(xerror.Fmt("test error"))
+		})
 
 		g.Wait()
-		fmt.Println(g.Err())
 
 		g.Cancel()
 
