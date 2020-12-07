@@ -2,6 +2,7 @@ package xprocess
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/pubgo/xerror"
@@ -53,13 +54,13 @@ func (g *group) Wait() {
 
 // Go
 // 运行一个goroutine
-func (g *group) Go(fn func(ctx context.Context) error) error {
+func (g *group) Go(fn func(ctx context.Context) error) {
 	if fn == nil {
-		return xerror.New("[fn] should not be nil")
+		xerror.Next().Panic(errors.New("[fn] should not be nil"))
 	}
 
 	if err := g.ctx.Err(); err != nil {
-		return xerror.Wrap(err)
+		xerror.Next().Panic(err)
 	}
 
 	go func() {
@@ -72,5 +73,4 @@ func (g *group) Go(fn func(ctx context.Context) error) error {
 		}()
 		g.err.Store(fn(g.ctx))
 	}()
-	return nil
 }
