@@ -106,3 +106,33 @@ func (t *process) goWithTimeout(dur time.Duration, fn func(ctx context.Context) 
 		return ErrTimeout
 	}
 }
+
+func (t *process) goWithDelay(dur time.Duration, fn func(ctx context.Context)) (context.CancelFunc, error) {
+	if dur < 0 {
+		return nil, xerror.New("[dur] should not be less than zero")
+	}
+
+	if fn == nil {
+		return nil, xerror.New("[fn] should not be nil")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var counter = dataCounter(fn)
+	go func() {
+		defer func() {
+			counter()
+			cancel()
+		}()
+
+		defer xerror.Resp(func(err xerror.XErr) {
+			dur = 0
+			xlog.Error("process.goWithDelay handle error", xlog.Any("err", err))
+		})
+
+		fn(ctx)
+	}()
+
+	time.Sleep(dur)
+
+	return cancel, nil
+}

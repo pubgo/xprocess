@@ -26,6 +26,12 @@ func GoLoop(fn func(ctx context.Context)) context.CancelFunc {
 	return defaultProcess.goLoopCtx(fn)
 }
 
+// GoDelay
+// 延迟goroutine
+func GoDelay(dur time.Duration, fn func(ctx context.Context)) context.CancelFunc {
+	return xerror.Next().PanicErr(defaultProcess.goWithDelay(dur, fn)).(context.CancelFunc)
+}
+
 // Timeout
 // 执行超时函数, 超时后, 函数自动退出
 func Timeout(dur time.Duration, fn func(ctx context.Context) error) error {
