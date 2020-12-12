@@ -12,6 +12,7 @@ import (
 )
 
 var ErrTimeout = xerror.New("timeout")
+var Break = xerror.New("break")
 
 var data sync.Map
 
@@ -46,7 +47,7 @@ func (t *process) goCtx(fn func(ctx context.Context)) context.CancelFunc {
 	return cancel
 }
 
-func (t *process) goLoopCtx(fn func(ctx context.Context)) context.CancelFunc {
+func (t *process) goLoopCtx(fn func(ctx context.Context) error) context.CancelFunc {
 	if fn == nil {
 		return func() { return }
 	}
@@ -68,7 +69,11 @@ func (t *process) goLoopCtx(fn func(ctx context.Context)) context.CancelFunc {
 			case <-ctx.Done():
 				return
 			default:
-				fn(ctx)
+				err := fn(ctx)
+				if err == Break {
+					return
+				}
+				xerror.Panic(err)
 			}
 		}
 	}()

@@ -22,7 +22,7 @@ func Go(fn func(ctx context.Context)) context.CancelFunc {
 // GoLoop
 // 启动一个goroutine loop
 // 是为了替换 `go func() {for{ }}()` 这类的代码
-func GoLoop(fn func(ctx context.Context)) context.CancelFunc {
+func GoLoop(fn func(ctx context.Context) error) context.CancelFunc {
 	return defaultProcess.goLoopCtx(fn)
 }
 
