@@ -13,7 +13,7 @@ import (
 
 func TestCancel(t *testing.T) {
 	fmt.Println(xprocess.Stack())
-	cancel := xprocess.Go(func(ctx context.Context)  {
+	cancel := xprocess.Go(func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -35,20 +35,20 @@ func TestCancel(t *testing.T) {
 func TestName(t *testing.T) {
 	fmt.Println(xprocess.Stack())
 	for {
-		xprocess.Go(func(ctx context.Context)  {
+		xprocess.Go(func(ctx context.Context) {
 			time.Sleep(time.Second)
 			fmt.Println("g2")
 			return
 		})
 
-		xprocess.GoLoop(func(ctx context.Context)  {
+		xprocess.GoLoop(func(ctx context.Context) error {
 			time.Sleep(time.Second)
 			fmt.Println("g3")
-			return
+			return nil
 		})
 
 		g := xprocess.NewGroup()
-		g.Go(func(ctx context.Context)  {
+		g.Go(func(ctx context.Context) {
 			fmt.Println("g4")
 		})
 
@@ -56,7 +56,7 @@ func TestName(t *testing.T) {
 			fmt.Println("g5")
 		})
 
-		g.Go(func(ctx context.Context)  {
+		g.Go(func(ctx context.Context) {
 			fmt.Println("g6")
 			xerror.Panic(xerror.Fmt("test error"))
 		})
