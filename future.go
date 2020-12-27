@@ -58,7 +58,9 @@ type IFuture interface {
 
 type Yield interface {
 	Go(fn func())
-	Return(data Value)
+	Yield(data Value)
+	Return(data interface{})
+	Async(fn interface{}, args ...interface{}) error
 }
 
 type future struct {
@@ -68,7 +70,11 @@ type future struct {
 	done sync.Once
 }
 
-func (s *future) Yield(fn interface{}, args ...interface{}) (err error) {
+func (s *future) Yield(data Value) {
+	panic("implement me")
+}
+
+func (s *future) Async(fn interface{}, args ...interface{}) (err error) {
 	defer xerror.RespExit()
 
 	vfn := reflect.ValueOf(fn)
@@ -132,8 +138,8 @@ func (s *future) Chan() <-chan interface{} {
 	return data
 }
 
-func (s *future) Return(data Value) {
-	s.data <- data
+func (s *future) Return(data interface{}) {
+	s.data <- NewValue(data, nil)
 }
 
 func (s *future) Await(fn func(data Value)) {
