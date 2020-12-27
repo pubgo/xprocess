@@ -11,6 +11,11 @@ func handleReq(i int) Value {
 	return Async(http.Get, "https://www.cnblogs.com")
 }
 
+func handleReq1(i int) (*http.Response, error) {
+	fmt.Println("url", i)
+	return http.Get("https://www.cnblogs.com")
+}
+
 func getData() IFuture {
 	return Future(func(y Yield) {
 		for i := 10; i > 0; i-- {
@@ -19,7 +24,7 @@ func getData() IFuture {
 				return
 			}
 
-			y.Return(handleReq(i))
+			y.Yield(handleReq(i))
 		}
 	}, 2)
 }

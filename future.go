@@ -57,9 +57,7 @@ type IFuture interface {
 }
 
 type Yield interface {
-	Go(fn func())
-	Yield(data Value)
-	Return(data interface{})
+	Yield(data interface{})
 	Async(fn interface{}, args ...interface{}) error
 }
 
@@ -70,8 +68,20 @@ type future struct {
 	done sync.Once
 }
 
-func (s *future) Yield(data Value) {
-	panic("implement me")
+func (s *future) Await(fn func(data Value)) {
+	for data := range s.data {
+		fn(data)
+	}
+}
+
+func (s *future) Yield(data interface{}) {
+	dt, ok := data.(Value)
+	if ok {
+		s.data <- dt
+		return
+	}
+
+	s.data <- NewValue(data, nil)
 }
 
 func (s *future) Async(fn interface{}, args ...interface{}) (err error) {
@@ -117,7 +127,7 @@ func (s *future) Async(fn interface{}, args ...interface{}) (err error) {
 	}
 
 	if len(dt) > 0 {
-		//s.Return(dt[0].Interface())
+		s.Yield(dt[0].Interface())
 	}
 
 	if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
@@ -136,16 +146,6 @@ func (s *future) Chan() <-chan interface{} {
 		}
 	}()
 	return data
-}
-
-func (s *future) Return(data interface{}) {
-	s.data <- NewValue(data, nil)
-}
-
-func (s *future) Await(fn func(data Value)) {
-	for data := range s.data {
-		fn(data)
-	}
 }
 
 func (s *future) Go(fn func()) {
