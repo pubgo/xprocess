@@ -64,11 +64,15 @@ func (g *group) Go(fn func(ctx context.Context)) {
 	default:
 		go func() {
 			defer func() {
-				defer xerror.Resp(func(err xerror.XErr) { xlog.Error("group.Go handle error", xlog.Any("err", err)) })
 				g.n.Dec()
 				g.wg.Done()
 				counter()
 			}()
+
+			defer xerror.Resp(func(err xerror.XErr) {
+				xlog.Error("group.Go handle error", xlog.Any("err", err))
+			})
+
 			fn(g.ctx)
 		}()
 

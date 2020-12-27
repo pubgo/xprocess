@@ -97,10 +97,12 @@ func (t *process) goWithTimeout(dur time.Duration, fn func(ctx context.Context) 
 	var counter = dataCounter(fn)
 	go func() {
 		defer func() {
-			xerror.Resp(func(err xerror.XErr) { ch <- err })
 			counter()
 			cancel()
 		}()
+
+		defer xerror.Resp(func(err xerror.XErr) { ch <- err })
+
 		ch <- fn(ctx)
 	}()
 
