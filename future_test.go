@@ -2,14 +2,15 @@ package xprocess
 
 import (
 	"fmt"
-	"github.com/pubgo/xerror"
 	"net/http"
 	"testing"
+
+	"github.com/pubgo/xerror"
 )
 
-func handleReq(i int) (*http.Response, error) {
+func handleReq(i int) Value {
 	fmt.Println("url", i)
-	return http.Get("https://www.cnblogs.com")
+	return Async(http.Get, "https://www.cnblogs.com")
 }
 
 func getData() IFuture {
@@ -20,67 +21,58 @@ func getData() IFuture {
 				return
 			}
 
-			y.Go(func() {
-				resp, err := handleReq(i)
-				if err != nil {
-					panic(err)
-				}
-
-				y.Return(resp)
-			})
+			y.Return(handleReq(i))
 		}
 	}, 2)
 }
 
 func getDataWithAwait() IFuture {
 	return Future(func(y Yield) {
+		defer xerror.RespExit()
+
 		for i := 10; i > 0; i-- {
-			i1 := i
-			if i1 <= 3 {
+			if i <= 3 {
 				return
 			}
 
-			xerror.Panic(y.Yield(handleReq, i1))
+			fmt.Println(y.Yield(handleReq, i))
 		}
 	}, 2)
 }
 
 func handleData() IFuture {
-	s := getData()
-	return s.Future(func(y Yield) {
-		for resp := range s.Chan() {
-			y.Return(resp.(*http.Response).Header)
-		}
+	return Future(func(y Yield) {
+		getData().Await(func(data interface{}) {
+			y.Return(data.(*http.Response).Header)
+		})
 	})
 }
 
 func handleData1() IFuture {
-	s := getDataWithAwait()
-	return s.Future(func(y Yield) {
-		for resp := range s.Chan() {
-			y.Return(resp.(*http.Response).Header)
-		}
+	return Future(func(y Yield) {
+		getDataWithAwait().Await(func(data interface{}) {
+			y.Return(data.(*http.Response).Header)
+		})
 	})
 }
 
 func TestStream(t *testing.T) {
-	s := handleData()
-	go s.Await(func(data interface{}) {
+	handleData().Await(func(data interface{}) {
 		fmt.Println("dt", data)
 	})
-
-	for dt := range s.Chan() {
-		fmt.Println("data", dt)
-	}
 }
 
 func TestStream1(t *testing.T) {
-	s := handleData1()
-	go s.Await(func(data interface{}) {
+	handleData1().Await(func(data interface{}) {
 		fmt.Println("dt", data)
 	})
+}
 
-	for dt := range s.Chan() {
-		fmt.Println("data", dt)
-	}
+func TestW1(t *testing.T) {
+	val1 := Async(handleReq, 1)
+	val2 := Async(handleReq, 1)
+	val3 := Async(handleReq, 1)
+	val4 := Async(handleReq, 1)
+
+	fmt.Println(val1.Value(), val2.Value(), val3.Value(), val4.Value())
 }

@@ -7,17 +7,34 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_util"
-	"github.com/pubgo/xlog"
 )
 
 var ErrInputOutputParamsNotMatch = xerror.New("the input num and output num of the callback func is not match")
 var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback func is not match")
 var ErrCallBackInValid = xerror.New("the func is invalid")
 
+type Value interface {
+	Value() interface{}
+	Err() error
+}
+
+var _ Value = (*ValueSs)(nil)
+
+type ValueSs struct {
+	err chan error
+	val chan interface{}
+}
+
+func (v ValueSs) Value() interface{} {
+	return <-v.val
+}
+
+func (v ValueSs) Err() error {
+	return <-v.err
+}
+
 type IFuture interface {
-	Await(func(data interface{}))
-	Chan() <-chan interface{}
-	Future(fn func(y Yield), nums ...int) IFuture
+	Await(fn func(data interface{}))
 }
 
 type Yield interface {
@@ -34,7 +51,7 @@ type future struct {
 }
 
 func (s *future) Yield(fn interface{}, args ...interface{}) (err error) {
-	defer xerror.RespErr(&err)
+	defer xerror.RespExit()
 
 	vfn := reflect.ValueOf(fn)
 
@@ -86,24 +103,6 @@ func (s *future) Yield(fn interface{}, args ...interface{}) (err error) {
 	return nil
 }
 
-func (s *future) Future(fn func(y Yield), nums ...int) IFuture {
-	num := runtime.NumCPU() * 2
-	if len(nums) > 0 {
-		num = nums[0]
-	}
-
-	stm := &future{num: int32(num), data: make(chan interface{}, num)}
-	go func() {
-		defer stm.done.Do(func() { close(stm.data) })
-		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Error("Future panic", xlog.Any("err", err))
-		})
-
-		fn(stm)
-	}()
-	return stm
-}
-
 func (s *future) Chan() <-chan interface{} {
 	var data = make(chan interface{})
 	go func() {
@@ -151,6 +150,60 @@ func Future(fn func(y Yield), nums ...int) IFuture {
 	go fn(s)
 
 	return s
+}
+
+func Async(fn interface{}, args ...interface{}) Value {
+	vfn := reflect.ValueOf(fn)
+
+	var values = valueGet()
+	defer valuePut(values)
+
+	for _, k := range args {
+		values = append(values, reflect.ValueOf(k))
+	}
+
+	for i, k := range values {
+		if !k.IsValid() {
+			args[i] = reflect.New(vfn.Type().In(i)).Elem()
+			continue
+		}
+
+		switch k.Kind() {
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+			if k.IsNil() {
+				args[i] = reflect.New(vfn.Type().In(i)).Elem()
+				continue
+			}
+		}
+
+		values[i] = k
+	}
+
+	var val = make(chan interface{})
+	var errChan = make(chan error)
+	go func() {
+		defer xerror.Resp(func(err xerror.XErr) {
+			errChan <- err
+			val <- nil
+		})
+
+		dt := vfn.Call(values)
+		if len(dt) == 0 {
+			xerror.Panic(xerror.New("output num is zero"))
+		}
+
+		if len(dt) > 0 {
+			val <- dt[0].Interface()
+		}
+
+		if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
+			xerror.Panic(dt[1].Interface().(error))
+		}
+
+		errChan <- nil
+	}()
+
+	return &ValueSs{val: val, err: errChan}
 }
 
 func Await(fn interface{}, args ...interface{}) func(fn ...interface{}) {
