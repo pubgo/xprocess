@@ -2,6 +2,7 @@ package xprocess
 
 import (
 	"fmt"
+	"github.com/pubgo/xerror"
 	"net/http"
 	"testing"
 )
@@ -34,14 +35,12 @@ func getData() IFuture {
 func getDataWithAwait() IFuture {
 	return Future(func(y Yield) {
 		for i := 10; i > 0; i-- {
-			Await(handleReq)(func(resp *http.Response, err error) {
-				if err != nil {
-					panic(err)
-				}
+			i1 := i
+			if i1 <= 3 {
+				return
+			}
 
-				y.Return(resp)
-				fmt.Println(i)
-			})
+			xerror.Panic(y.Yield(handleReq, i1))
 		}
 	}, 2)
 }
@@ -66,15 +65,22 @@ func handleData1() IFuture {
 
 func TestStream(t *testing.T) {
 	s := handleData()
+	go s.Await(func(data interface{}) {
+		fmt.Println("dt", data)
+	})
+
 	for dt := range s.Chan() {
-		fmt.Println("dt", dt)
+		fmt.Println("data", dt)
 	}
 }
 
 func TestStream1(t *testing.T) {
 	s := handleData1()
+	go s.Await(func(data interface{}) {
+		fmt.Println("dt", data)
+	})
+
 	for dt := range s.Chan() {
-		fmt.Println("dt", dt)
+		fmt.Println("data", dt)
 	}
-	s.Wait()
 }

@@ -1,14 +1,13 @@
 package xprocess
 
 import (
-	"fmt"
-	"github.com/pubgo/xerror"
-	"github.com/pubgo/xerror/xerror_util"
-	"github.com/pubgo/xlog"
-	"go.uber.org/atomic"
 	"reflect"
 	"runtime"
 	"sync"
+
+	"github.com/pubgo/xerror"
+	"github.com/pubgo/xerror/xerror_util"
+	"github.com/pubgo/xlog"
 )
 
 var ErrInputOutputParamsNotMatch = xerror.New("the input num and output num of the callback func is not match")
@@ -16,7 +15,6 @@ var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback fun
 var ErrCallBackInValid = xerror.New("the func is invalid")
 
 type IFuture interface {
-	Wait()
 	Await(func(data interface{}))
 	Chan() <-chan interface{}
 	Future(fn func(y Yield), nums ...int) IFuture
@@ -25,21 +23,67 @@ type IFuture interface {
 type Yield interface {
 	Go(fn func())
 	Return(data interface{})
+	Yield(fn interface{}, args ...interface{}) error
 }
 
 type future struct {
-	num    int32
-	count  atomic.Int32
-	data   chan interface{}
-	stop   *atomic.Bool
-	done   chan bool
-	mu     sync.Mutex
-	cancel []func()
+	wg   sync.WaitGroup
+	num  int32
+	data chan interface{}
+	done sync.Once
 }
 
-func (s *future) Wait() {
-	//s.wg.Wait()
-	//s.stop.Store(true)
+func (s *future) Yield(fn interface{}, args ...interface{}) (err error) {
+	defer xerror.RespErr(&err)
+
+	vfn := reflect.ValueOf(fn)
+
+	var values = valueGet()
+	defer valuePut(values)
+
+	for _, k := range args {
+		values = append(values, reflect.ValueOf(k))
+	}
+
+	for i, k := range values {
+		if !k.IsValid() {
+			args[i] = reflect.New(vfn.Type().In(i)).Elem()
+			continue
+		}
+
+		switch k.Kind() {
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+			if k.IsNil() {
+				args[i] = reflect.New(vfn.Type().In(i)).Elem()
+				continue
+			}
+		}
+
+		values[i] = k
+	}
+
+	var dt []reflect.Value
+	var errChan = make(chan error)
+	s.Go(func() {
+		defer xerror.Resp(func(err xerror.XErr) { errChan <- err })
+		dt = vfn.Call(values)
+		errChan <- nil
+	})
+	xerror.Panic(<-errChan)
+
+	if len(dt) == 0 {
+		return xerror.New("output num is zero")
+	}
+
+	if len(dt) > 0 {
+		s.Return(dt[0].Interface())
+	}
+
+	if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
+		return dt[1].Interface().(error)
+	}
+
+	return nil
 }
 
 func (s *future) Future(fn func(y Yield), nums ...int) IFuture {
@@ -48,17 +92,11 @@ func (s *future) Future(fn func(y Yield), nums ...int) IFuture {
 		num = nums[0]
 	}
 
-	stm := &future{stop: s.stop, num: int32(num), data: make(chan interface{}, num)}
-
+	stm := &future{num: int32(num), data: make(chan interface{}, num)}
 	go func() {
-		defer func() {
-			<-s.done
-			close(s.data)
-		}()
-
+		defer stm.done.Do(func() { close(stm.data) })
 		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Debug("Future panic", xlog.Any("err", err))
-			stm.stop.Store(true)
+			xlog.Error("Future panic", xlog.Any("err", err))
 		})
 
 		fn(stm)
@@ -78,13 +116,6 @@ func (s *future) Chan() <-chan interface{} {
 }
 
 func (s *future) Return(data interface{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.stop.Load() {
-		return
-	}
-
 	s.data <- data
 }
 
@@ -95,22 +126,17 @@ func (s *future) Await(fn func(data interface{})) {
 }
 
 func (s *future) Go(fn func()) {
-	if s.stop.Load() {
-		return
-	}
+	s.wg.Add(1)
 
-	s.count.Inc()
-	go func() {
-		defer func() {
-			s.count.Dec()
-			fmt.Println("s.count", s.count.Load())
+	s.done.Do(func() {
+		go func() {
+			s.wg.Wait()
+			close(s.data)
 		}()
+	})
 
-		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Debug("future.Go panic", xlog.Any("err", err))
-			s.stop.Store(true)
-		})
-
+	go func() {
+		defer s.wg.Done()
 		fn()
 	}()
 }
@@ -121,20 +147,8 @@ func Future(fn func(y Yield), nums ...int) IFuture {
 		num = nums[0]
 	}
 
-	s := &future{stop: atomic.NewBool(false), num: int32(num), done: make(chan bool), data: make(chan interface{}, num)}
-	go func() {
-		defer func() {
-			<-s.done
-			close(s.data)
-		}()
-
-		defer xerror.Resp(func(err xerror.XErr) {
-			xlog.Debug("Future panic", xlog.Any("err", err))
-			s.stop.Store(true)
-		})
-
-		fn(s)
-	}()
+	s := &future{num: int32(num), data: make(chan interface{}, num)}
+	go fn(s)
 
 	return s
 }
