@@ -59,7 +59,6 @@ type IFuture interface {
 type Yield interface {
 	Go(fn func())
 	Return(data Value)
-	Yield(fn interface{}, args ...interface{}) error
 }
 
 type future struct {

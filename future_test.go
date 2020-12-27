@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
-
-	"github.com/pubgo/xerror"
 )
 
 func handleReq(i int) Value {
@@ -26,44 +24,17 @@ func getData() IFuture {
 	}, 2)
 }
 
-func getDataWithAwait() IFuture {
-	return Future(func(y Yield) {
-		defer xerror.RespExit()
-
-		for i := 10; i > 0; i-- {
-			if i <= 3 {
-				return
-			}
-
-			fmt.Println(y.Yield(handleReq, i))
-		}
-	}, 2)
-}
-
 func handleData() IFuture {
 	return Future(func(y Yield) {
 		getData().Await(func(data Value) {
-			y.Return(NewValue(data.Value().(*http.Response).Header, nil))
-		})
-	})
-}
-
-func handleData1() IFuture {
-	return Future(func(y Yield) {
-		getDataWithAwait().Await(func(data Value) {
-			y.Return(NewValue(data.Value().(*http.Response).Header, nil))
+			resp := data.Value().(*http.Response).Header
+			y.Return(NewValue(resp, nil))
 		})
 	})
 }
 
 func TestStream(t *testing.T) {
 	handleData().Await(func(data Value) {
-		fmt.Println("dt", data.Value())
-	})
-}
-
-func TestStream1(t *testing.T) {
-	handleData1().Await(func(data Value) {
 		fmt.Println("dt", data.Value())
 	})
 }
