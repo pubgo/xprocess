@@ -18,6 +18,25 @@ type Value interface {
 	Err() error
 }
 
+func NewValue(val interface{}, err error) Value {
+	return ValueSs1{val: val, err: err}
+}
+
+var _ Value = (*ValueSs1)(nil)
+
+type ValueSs1 struct {
+	err error
+	val interface{}
+}
+
+func (v ValueSs1) Value() interface{} {
+	return v.val
+}
+
+func (v ValueSs1) Err() error {
+	return v.err
+}
+
 var _ Value = (*ValueSs)(nil)
 
 type ValueSs struct {
@@ -34,19 +53,19 @@ func (v ValueSs) Err() error {
 }
 
 type IFuture interface {
-	Await(fn func(data interface{}))
+	Await(fn func(data Value))
 }
 
 type Yield interface {
 	Go(fn func())
-	Return(data interface{})
+	Return(data Value)
 	Yield(fn interface{}, args ...interface{}) error
 }
 
 type future struct {
 	wg   sync.WaitGroup
 	num  int32
-	data chan interface{}
+	data chan Value
 	done sync.Once
 }
 
@@ -93,7 +112,7 @@ func (s *future) Yield(fn interface{}, args ...interface{}) (err error) {
 	}
 
 	if len(dt) > 0 {
-		s.Return(dt[0].Interface())
+		//s.Return(dt[0].Interface())
 	}
 
 	if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
@@ -114,11 +133,11 @@ func (s *future) Chan() <-chan interface{} {
 	return data
 }
 
-func (s *future) Return(data interface{}) {
+func (s *future) Return(data Value) {
 	s.data <- data
 }
 
-func (s *future) Await(fn func(data interface{})) {
+func (s *future) Await(fn func(data Value)) {
 	for data := range s.data {
 		fn(data)
 	}
@@ -146,7 +165,7 @@ func Future(fn func(y Yield), nums ...int) IFuture {
 		num = nums[0]
 	}
 
-	s := &future{num: int32(num), data: make(chan interface{}, num)}
+	s := &future{num: int32(num), data: make(chan Value, num)}
 	go fn(s)
 
 	return s

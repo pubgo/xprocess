@@ -42,29 +42,29 @@ func getDataWithAwait() IFuture {
 
 func handleData() IFuture {
 	return Future(func(y Yield) {
-		getData().Await(func(data interface{}) {
-			y.Return(data.(*http.Response).Header)
+		getData().Await(func(data Value) {
+			y.Return(NewValue(data.Value().(*http.Response).Header, nil))
 		})
 	})
 }
 
 func handleData1() IFuture {
 	return Future(func(y Yield) {
-		getDataWithAwait().Await(func(data interface{}) {
-			y.Return(data.(*http.Response).Header)
+		getDataWithAwait().Await(func(data Value) {
+			y.Return(NewValue(data.Value().(*http.Response).Header, nil))
 		})
 	})
 }
 
 func TestStream(t *testing.T) {
-	handleData().Await(func(data interface{}) {
-		fmt.Println("dt", data)
+	handleData().Await(func(data Value) {
+		fmt.Println("dt", data.Value())
 	})
 }
 
 func TestStream1(t *testing.T) {
-	handleData1().Await(func(data interface{}) {
-		fmt.Println("dt", data)
+	handleData1().Await(func(data Value) {
+		fmt.Println("dt", data.Value())
 	})
 }
 
