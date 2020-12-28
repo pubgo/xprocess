@@ -46,13 +46,12 @@ func getData() IFuture {
 				y.Yield(resp)
 			})
 
-			a := Async(http.Get, "https://www.cnblogs.com")
-
+			//a := Async(http.Get, "https://www.cnblogs.com")
 			//y.Yield(a)
-			y.Await(a, func(resp *http.Response, err error) {
-				xerror.Panic(err)
-				y.Yield(resp)
-			})
+			//y.Await(a, func(resp *http.Response, err error) {
+			//	xerror.Panic(err)
+			//	y.Yield(resp)
+			//})
 		}
 	}, 2)
 }
@@ -73,7 +72,7 @@ func TestStream(t *testing.T) {
 
 func TestStream1(t *testing.T) {
 	for dt := range handleData().Chan() {
-		fmt.Println("dt", dt)
+		fmt.Println("dt", dt.Get())
 	}
 }
 

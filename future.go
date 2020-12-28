@@ -17,7 +17,7 @@ var ErrCallBackInValid = xerror.New("the func is invalid")
 type Value interface {
 	Raw() []reflect.Value    // block
 	Value(fn ...interface{}) // async callback
-	Get() interface{}        // wait for value
+	Get() interface{}        // block wait for value
 }
 
 var _ Value = (*valueFunc)(nil)
@@ -70,7 +70,7 @@ func (v valueFunc) Get() interface{} {
 
 type IFuture interface {
 	Value(fn interface{})
-	Chan() <-chan interface{}
+	Chan() <-chan Value
 }
 
 type Yield interface {
@@ -103,32 +103,7 @@ func (s *future) Yield(data interface{}) {
 	s.data <- &valueFunc{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }}
 }
 
-func (s *future) Chan() <-chan interface{} {
-	var data = make(chan interface{})
-	go func() {
-		defer close(data)
-		for dt := range s.data {
-			data <- dt
-		}
-	}()
-	return data
-}
-
-func (s *future) Go(fn func()) {
-	s.wg.Add(1)
-
-	s.done.Do(func() {
-		go func() {
-			s.wg.Wait()
-			close(s.data)
-		}()
-	})
-
-	go func() {
-		defer s.wg.Done()
-		fn()
-	}()
-}
+func (s *future) Chan() <-chan Value { return s.data }
 
 func Future(fn func(y Yield), nums ...int) IFuture {
 	num := runtime.NumCPU() * 2
