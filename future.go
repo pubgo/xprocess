@@ -1,13 +1,14 @@
 package xprocess
 
 import (
-	"reflect"
-	"runtime"
-	"sync"
-
+	"fmt"
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_util"
 	"github.com/pubgo/xlog"
+	"go.uber.org/atomic"
+	"reflect"
+	"runtime"
+	"sync"
 )
 
 var ErrInputOutputParamsNotMatch = xerror.New("the input num and output num of the callback func is not match")
@@ -15,31 +16,53 @@ var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback fun
 var ErrCallBackInValid = xerror.New("the func is invalid")
 
 type Value interface {
-	Raw() []reflect.Value    // block
-	Value(fn ...interface{}) // async callback
-	Get() interface{}        // block wait for value
+	Raw() []reflect.Value         // block
+	Value(fn ...interface{})      // async callback
+	Pipe(fn ...interface{}) Value // async callback
+	Get() interface{}             // block wait for value
 }
 
 var _ Value = (*valueFunc)(nil)
 
 type valueFunc struct {
-	val func() []reflect.Value
+	val    func() []reflect.Value
+	values []reflect.Value
+	done   sync.Once
 }
 
-func (v valueFunc) Raw() []reflect.Value {
-	return v.val()
+func (v *valueFunc) Pipe(fn ...interface{}) Value {
+	if len(fn) == 0 {
+		return v
+	}
+
+	var values = make(chan []reflect.Value)
+	go func() {
+		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("Pipe panic", xlog.Any("err", err)) })
+		values <- reflect.ValueOf(fn[0]).Call(v.getVal())
+	}()
+
+	return &valueFunc{val: func() []reflect.Value { return <-values }}
 }
 
-func (v valueFunc) Value(fn ...interface{}) {
+func (v *valueFunc) getVal() []reflect.Value {
+	v.done.Do(func() { v.values = v.val() })
+	return v.values
+}
+
+func (v *valueFunc) Raw() []reflect.Value {
+	return v.getVal()
+}
+
+func (v *valueFunc) Value(fn ...interface{}) {
 	if len(fn) == 0 {
 		return
 	}
 
-	go func() { reflect.ValueOf(fn[0]).Call(v.val()) }()
+	reflect.ValueOf(fn[0]).Call(v.getVal())
 }
 
-func (v valueFunc) Get() interface{} {
-	values := v.val()
+func (v *valueFunc) Get() interface{} {
+	values := v.getVal()
 	if len(values) == 0 {
 		return nil
 	}
@@ -70,7 +93,6 @@ func (v valueFunc) Get() interface{} {
 
 type IFuture interface {
 	Value(fn interface{})
-	Chan() <-chan Value
 }
 
 type Yield interface {
@@ -79,31 +101,63 @@ type Yield interface {
 }
 
 type future struct {
-	wg   sync.WaitGroup
-	num  int32
-	data chan Value
-	done sync.Once
+	wg    *sync.WaitGroup
+	data  chan Value
+	num   int32
+	done  sync.Once
+	count atomic.Int32
 }
 
-func (s *future) Await(val Value, fn ...interface{}) { val.Value(fn...) }
-func (s *future) Value(fn interface{}) {
-	vfn := reflect.ValueOf(fn)
-	for data := range s.data {
-		go func(val Value) { vfn.Call(val.Raw()) }(data)
+func (s *future) Await(val Value, pipe ...interface{}) {
+	s.wg.Add(1)
+	s.count.Inc()
+	if len(pipe) > 0 {
+		val = val.Pipe(pipe...)
 	}
+	go func() { s.data <- val }()
 }
 
 func (s *future) Yield(data interface{}) {
-	dt, ok := data.(Value)
-	if ok {
-		s.data <- dt
+	if val, ok := data.(Value); ok {
+		s.Await(val)
 		return
 	}
 
-	s.data <- &valueFunc{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }}
+	s.wg.Add(1)
+	s.count.Inc()
+
+	val := &valueFunc{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }}
+	go func() { s.data <- val }()
 }
 
-func (s *future) Chan() <-chan Value { return s.data }
+func (s *future) close() {
+	s.done.Do(func() {
+		go func() {
+			for {
+				s.wg.Wait()
+				fmt.Println(s.count.Load())
+				if s.count.Load() == 0 {
+					break
+				}
+			}
+
+			close(s.data)
+		}()
+	})
+}
+
+func (s *future) Value(fn interface{}) {
+	vfn := reflect.ValueOf(fn)
+	for data := range s.data {
+		s.close()
+
+		go func(val Value) {
+			defer s.wg.Done()
+			defer s.count.Dec()
+			vfn.Call(val.Raw())
+		}(data)
+	}
+}
 
 func Future(fn func(y Yield), nums ...int) IFuture {
 	num := runtime.NumCPU() * 2
@@ -111,7 +165,7 @@ func Future(fn func(y Yield), nums ...int) IFuture {
 		num = nums[0]
 	}
 
-	s := &future{num: int32(num), data: make(chan Value, num)}
+	s := &future{num: int32(num), data: make(chan Value, num), wg: &sync.WaitGroup{}}
 	go fn(s)
 	return s
 }

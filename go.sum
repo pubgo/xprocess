@@ -6,6 +6,7 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239 h1:Ghm4eQYC0nEPnSJdVkTrXpu9KtoVCSo1hg7mtI7G9KU=
 github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239/go.mod h1:Gdwt2ce0yfBxPvZrHkprdPPTTS3N5rwmLE8T22KBXlw=
+github.com/google/gofuzz v1.1.0 h1:Hsa8mG0dQ46ij8Sl2AYJDUv1oA9/d6Vk+3LG99Oe02g=
 github.com/google/gofuzz v1.1.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
@@ -46,6 +47,7 @@ github.com/pubgo/xlog v0.0.7/go.mod h1:ncnCsQgtfaxIjjYyToKO+97j87gBgsJaKUcnPB44x
 github.com/pubgo/xlog v0.0.10 h1:Lt/4uyGZzwgLXe0oCxUHzMl/OLrZR0h0/DeJXHxVvos=
 github.com/pubgo/xlog v0.0.10/go.mod h1:qZURdwFKstck0ygidDX8q1GTZ/pGM+Qp5bYOjXSxRu0=
 github.com/pubgo/xtest v0.1.5/go.mod h1:JJQoEy17r2diuHe3PVXqTxp3Zf5mOOBrxSRCy05Gs6M=
+github.com/pubgo/xtest v0.1.6 h1:rP7RnNPKlAE+2eD0k3dSYb07EUoRAn1mN9C0IFUcMKQ=
 github.com/pubgo/xtest v0.1.6/go.mod h1:0/MrhdMlYAs9z6cHLVvn4Ygh7NnAD3+TEgO+9xhXk6k=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d/go.mod h1:OnSkiWE9lh6wB0YB77sQom3nweQdgAjqCqsofrRNTgc=
