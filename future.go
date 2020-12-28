@@ -15,29 +15,30 @@ var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback fun
 var ErrCallBackInValid = xerror.New("the func is invalid")
 
 type Value interface {
-	Raw() ([]reflect.Value, error)
-	Value(fn ...interface{})
-	Get() interface{}
+	Raw() []reflect.Value    // block
+	Value(fn ...interface{}) // async callback
+	Get() interface{}        // wait for value
 }
 
 var _ Value = (*valueFunc)(nil)
 
 type valueFunc struct {
-	err func() error
 	val func() []reflect.Value
 }
 
-func (v valueFunc) Raw() ([]reflect.Value, error) {
-	return v.val(), v.err()
+func (v valueFunc) Raw() []reflect.Value {
+	return v.val()
 }
 
 func (v valueFunc) Value(fn ...interface{}) {
-	xerror.Next().Panic(v.err())
-	reflect.ValueOf(fn).Call(v.val())
+	if len(fn) == 0 {
+		return
+	}
+
+	go func() { reflect.ValueOf(fn[0]).Call(v.val()) }()
 }
 
 func (v valueFunc) Get() interface{} {
-	xerror.Next().Panic(v.err())
 	values := v.val()
 	if len(values) == 0 {
 		return nil
@@ -57,11 +58,13 @@ func (v valueFunc) Get() interface{} {
 		}
 
 		val := values[0].Interface()
-		if val, ok := val.(Value); ok {
+		if val1, ok := val.(Value); ok {
 			defer xerror.RespRaise("valueFunc.Get")
-			return val.Get()
+			return val1.Get()
 		}
+		return val
 	}
+
 	return nil
 }
 
@@ -72,7 +75,7 @@ type IFuture interface {
 
 type Yield interface {
 	Yield(data interface{})
-	Await(fn interface{}, args ...interface{}) func(func(fn interface{}))
+	Await(val Value, fn ...interface{})
 }
 
 type future struct {
@@ -82,15 +85,11 @@ type future struct {
 	done sync.Once
 }
 
-func (s *future) Await(fn interface{}, args ...interface{}) func(func(fn interface{})) {
-	panic("implement me")
-}
-
+func (s *future) Await(val Value, fn ...interface{}) { val.Value(fn...) }
 func (s *future) Value(fn interface{}) {
 	vfn := reflect.ValueOf(fn)
 	for data := range s.data {
-		val := xerror.PanicErr(data.Raw())
-		vfn.Call([]reflect.Value{reflect.ValueOf(val)})
+		go func(val Value) { vfn.Call(val.Raw()) }(data)
 	}
 }
 
@@ -102,58 +101,6 @@ func (s *future) Yield(data interface{}) {
 	}
 
 	s.data <- &valueFunc{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }}
-}
-
-func (s *future) Async(fn interface{}, args ...interface{}) {
-	defer xerror.RespExit()
-
-	vfn := reflect.ValueOf(fn)
-
-	var values = valueGet()
-	defer valuePut(values)
-
-	for _, k := range args {
-		values = append(values, reflect.ValueOf(k))
-	}
-
-	for i, k := range values {
-		if !k.IsValid() {
-			args[i] = reflect.New(vfn.Type().In(i)).Elem()
-			continue
-		}
-
-		switch k.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
-			if k.IsNil() {
-				args[i] = reflect.New(vfn.Type().In(i)).Elem()
-				continue
-			}
-		}
-
-		values[i] = k
-	}
-
-	var val []reflect.Value
-	var errChan = make(chan error)
-	s.Go(func() {
-		defer xerror.Resp(func(err xerror.XErr) { errChan <- err })
-		val = vfn.Call(values)
-		//if len(dt) == 0 {
-		//	xerror.Panic(xerror.New("output num is zero"))
-		//}
-
-		//if len(dt) > 0 {
-		//	val = dt[0].Interface()
-		//}
-
-		//if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
-		//	xerror.Panic(dt[1].Interface().(error))
-		//}
-
-		errChan <- nil
-	})
-
-	s.Yield(&valueFunc{err: func() error { return <-errChan }, val: func() []reflect.Value { return val }})
 }
 
 func (s *future) Chan() <-chan interface{} {
@@ -191,12 +138,18 @@ func Future(fn func(y Yield), nums ...int) IFuture {
 
 	s := &future{num: int32(num), data: make(chan Value, num)}
 	go fn(s)
-
 	return s
 }
 
 func Async(fn interface{}, args ...interface{}) Value {
 	vfn := reflect.ValueOf(fn)
+	if vfn.Kind() != reflect.Func {
+		xerror.Next().Panic(xerror.New("[fn] type should be func"))
+	}
+
+	if !vfn.IsValid() || vfn.IsNil() {
+		xerror.Next().Panic(xerror.New("[fn] should not be nil"))
+	}
 
 	var values = valueGet()
 	defer valuePut(values)
@@ -207,47 +160,28 @@ func Async(fn interface{}, args ...interface{}) Value {
 
 	for i, k := range values {
 		if !k.IsValid() {
-			args[i] = reflect.New(vfn.Type().In(i)).Elem()
+			values[i] = reflect.New(vfn.Type().In(i)).Elem()
 			continue
 		}
 
 		switch k.Kind() {
 		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
 			if k.IsNil() {
-				args[i] = reflect.New(vfn.Type().In(i)).Elem()
+				values[i] = reflect.New(vfn.Type().In(i)).Elem()
 				continue
 			}
 		}
-
-		values[i] = k
 	}
 
-	var val []reflect.Value
-	var errChan = make(chan error)
+	var val = make(chan []reflect.Value)
 	go func() {
-		defer xerror.Resp(func(err xerror.XErr) { errChan <- err })
-
-		val = vfn.Call(values)
-		//if len(dt) == 0 {
-		//	xerror.Panic(xerror.New("output num is zero"))
-		//}
-		//
-		//if len(dt) > 0 {
-		//	val = dt[0].Interface()
-		//}
-		//
-		//if len(dt) > 1 && dt[1].IsValid() && !dt[1].IsNil() {
-		//	xerror.Panic(dt[1].Interface().(error))
-		//}
-
-		errChan <- nil
+		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("Async panic", xlog.Any("err", err)) })
+		val <- vfn.Call(values)
 	}()
-
-	return &valueFunc{val: func() []reflect.Value { return val }, err: func() error { return <-errChan }}
+	return &valueFunc{val: func() []reflect.Value { return <-val }}
 }
 
-func Await1(val Value, fn ...interface{}) { val.Value(fn...) }
-func Await(fn interface{}, args ...interface{}) func(fn ...interface{}) {
+func _Await(fn interface{}, args ...interface{}) func(fn ...interface{}) {
 	vfn := reflect.ValueOf(fn)
 
 	var values = valueGet()

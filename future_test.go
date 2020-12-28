@@ -2,6 +2,7 @@ package xprocess
 
 import (
 	"fmt"
+	"github.com/pubgo/xerror"
 	"net/http"
 	"testing"
 )
@@ -24,14 +25,10 @@ func getDataHeader() IFuture {
 				return
 			}
 
-			Await1(handleReq(i), func(resp *http.Response, err error) {
+			y.Await(handleReq(i), func(resp *http.Response, err error) {
 				y.Yield(resp.Header)
 			})
-
 			//y.Yield(handleReq(i))
-			Await(http.Get, "https://www.cnblogs.com")(func(resp *http.Response, err error) {
-				y.Yield(resp.Header)
-			})
 		}
 	}, 2)
 }
@@ -44,10 +41,18 @@ func getData() IFuture {
 				return
 			}
 
-			//y.Yield(handleReq(i))
-			//Await(http.Get, "https://www.cnblogs.com")(func() {
-			//	y.Yield()
-			//})
+			y.Await(handleReq(i), func(resp *http.Response, err error) {
+				xerror.Panic(err)
+				y.Yield(resp)
+			})
+
+			a := Async(http.Get, "https://www.cnblogs.com")
+
+			//y.Yield(a)
+			y.Await(a, func(resp *http.Response, err error) {
+				xerror.Panic(err)
+				y.Yield(resp)
+			})
 		}
 	}, 2)
 }
@@ -72,11 +77,11 @@ func TestStream1(t *testing.T) {
 	}
 }
 
-func TestW1(t *testing.T) {
-	val1 := Async(handleReq, 1)
-	val2 := Async(handleReq, 1)
-	val3 := Async(handleReq, 1)
-	val4 := Async(handleReq, 1)
+func TestAsync(t *testing.T) {
+	val1 := Async(handleReq1, 1)
+	val2 := Async(handleReq1, 1)
+	val3 := Async(handleReq1, 1)
+	val4 := Async(handleReq1, 1)
 
 	fmt.Printf("%#v, %#v, %#v, %#v\n", val1.Get(), val2.Get(), val3.Get(), val4.Get())
 }
