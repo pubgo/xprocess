@@ -20,6 +20,8 @@ func asyncHandleReq(i int) FutureValue {
 
 func getData() Future {
 	return Promise(func(y Yield) {
+		defer xerror.RespExit()
+
 		for i := 10; i > 0; i-- {
 			i := i
 			if i <= 3 {
@@ -33,17 +35,16 @@ func getData() Future {
 				return resp.Header
 			})
 
-			val1 := asyncHandleReq(1)
-			y.Await(head, func(h http.Header) {
-				h.Set("dddd", "hhhh")
-				val1.Value(func(resp *http.Response, err error) { resp.Header = h })
-				y.Yield(val1)
+			val1 := Await(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response{
+				resp.Header.Set("dddd", "hhhh")
+				head.Value(func(head http.Header) {resp.Header = head})
+				return resp
 			})
 
 			y.Yield(func() {
 				resp, err := http.Get("https://www.cnblogs.com")
 				xerror.Panic(err)
-				resp.Header.Add("test", "11111")
+				resp.Header.Add("testsssss", "11111")
 				y.Yield(resp)
 			})
 		}
@@ -53,7 +54,7 @@ func getData() Future {
 func handleData() Future {
 	return Promise(func(y Yield) {
 		s := getData()
-		s.Value(func(resp *http.Response, err error) {
+		s.Value(func(resp *http.Response) {
 			head := resp.Header
 			head.Add("test1111", "22222")
 			y.Yield(head)
@@ -90,25 +91,35 @@ func TestGetData(t *testing.T) {
 
 func handleData2() Future {
 	return Promise(func(y Yield) {
+		defer xerror.Resp(func(err xerror.XErr) {
+			y.Cancel()
+		})
+
 		for i := 10; i > 0; i-- {
+
+			i := i
 			y.Yield(i)
 			y.Yield(func() {
-				defer xerror.Resp(func(err xerror.XErr) { y.Cancel() })
+				if i == 5 {
+					//xerror.Panic(xerror.New("error test"))
+				}
 
 				resp, err := http.Get("https://www.cnblogs.com")
 				xerror.Panic(err)
 
 				y.Yield(resp)
-
 			})
 		}
 	})
 }
 
 func TestName11w(t *testing.T) {
-	s := handleData2()
-	s.Value(func(i interface{}) {
-		fmt.Println(i)
-	})
+	s := handleData2().
+		Err(func(err error) {
+			fmt.Println(err)
+		}).
+		Value(func(i interface{}) {
+			fmt.Println(i)
+		})
 	s.Done()
 }

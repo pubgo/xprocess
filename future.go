@@ -22,7 +22,7 @@ type Future interface {
 }
 
 type Yield interface {
-	Yield(data interface{}, fn ...interface{})
+	Yield(data interface{})
 	Await(val FutureValue, fn interface{})
 	Cancel()
 }
@@ -36,22 +36,12 @@ type future struct {
 
 func (s *future) Await(val FutureValue, fn interface{}) { val.Value(fn) }
 func (s *future) Err(f func(err error)) Future          { s.errCall = f; return s }
-func (s *future) Cancelled() bool {
-	return true
-}
-
-func (s *future) Done() bool {
-	return true
-}
-
-func (s *future) cancel() {}
-func (s *future) Cancel() { s.waitForClose() }
-func (s *future) Yield(data interface{}, fn ...interface{}) {
+func (s *future) Cancelled() bool                       { return true }
+func (s *future) Done() bool                            { return true }
+func (s *future) cancel()                               {}
+func (s *future) Cancel()                               { s.waitForClose() }
+func (s *future) Yield(data interface{}) {
 	if val, ok := data.(FutureValue); ok {
-		if len(fn) > 0 {
-
-		}
-
 		s.wg.Inc()
 		go func() { s.data <- val }()
 		return
@@ -104,7 +94,11 @@ func (s *future) Value(fn interface{}) Future {
 func Promise(fn func(y Yield)) Future {
 	s := &future{data: make(chan FutureValue)}
 	s.wg.Inc()
-	go func() { defer s.wg.Done(); fn(s) }()
+	go func() {
+		defer s.wg.Done()
+		defer xerror.RespExit()
+		fn(s)
+	}()
 	return s
 }
 
