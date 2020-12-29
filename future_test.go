@@ -107,7 +107,7 @@ func handleData2() Future {
 
 func TestName11w(t *testing.T) {
 	s := handleData2()
-	s.Value(func(i int) {
+	s.Value(func(i interface{}) {
 		fmt.Println(i)
 	})
 	s.Done()

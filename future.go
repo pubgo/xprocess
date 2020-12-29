@@ -37,11 +37,11 @@ type future struct {
 func (s *future) Await(val FutureValue, fn interface{}) { val.Value(fn) }
 func (s *future) Err(f func(err error)) Future          { s.errCall = f; return s }
 func (s *future) Cancelled() bool {
-	panic("implement me")
+	return true
 }
 
 func (s *future) Done() bool {
-	panic("implement me")
+	return true
 }
 
 func (s *future) cancel() {}
@@ -58,7 +58,9 @@ func (s *future) Yield(data interface{}, fn ...interface{}) {
 	}
 
 	if val, ok := data.(func()); ok {
+		s.wg.Inc()
 		go func() {
+			defer s.wg.Done()
 			defer xerror.Resp(func(err xerror.XErr) {
 				xlog.Error("future.Yield panic", xlog.Any("err", err))
 				s.Cancel()
