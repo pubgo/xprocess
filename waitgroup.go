@@ -3,27 +3,39 @@ package xprocess
 import (
 	"runtime"
 	"sync"
-
-	"go.uber.org/atomic"
+	"sync/atomic"
+	_ "unsafe"
 )
 
+//go:linkname state sync.(*WaitGroup).state
+func state(*sync.WaitGroup) (*uint64, *uint32)
+
 type WaitGroup struct {
-	wg    sync.WaitGroup
-	count atomic.Int32
-	Num   int32
+	_          int8
+	Check      int8
+	Concurrent int16
+	sync.WaitGroup
+}
+
+func (t *WaitGroup) Count() int16 {
+	count, _ := state(&t.WaitGroup)
+	return int16(atomic.LoadUint64(count) >> 32)
 }
 
 func (t *WaitGroup) check() {
-	if t.Num == 0 {
-		t.Num = int32(runtime.NumCPU() * 2)
+	if t.Check == 0 {
+		return
 	}
 
-	if t.count.Load() > t.Num {
-		t.wg.Wait()
+	if t.Concurrent == 0 {
+		t.Concurrent = int16(runtime.NumCPU() * 2)
+	}
+
+	if t.Count() >= t.Concurrent {
+		t.WaitGroup.Wait()
 	}
 }
 
-func (t *WaitGroup) Inc()          { t.count.Inc(); t.check(); t.wg.Add(1) }
-func (t *WaitGroup) Add(delta int) { t.count.Add(int32(delta)); t.check(); t.wg.Add(delta) }
-func (t *WaitGroup) Done()         { t.count.Dec(); t.wg.Done() }
-func (t *WaitGroup) Wait()         { t.wg.Wait() }
+func (t *WaitGroup) Inc()          { t.check(); t.WaitGroup.Add(1) }
+func (t *WaitGroup) Dec()          { t.check(); t.WaitGroup.Done() }
+func (t *WaitGroup) Add(delta int) { t.check(); t.WaitGroup.Add(delta) }

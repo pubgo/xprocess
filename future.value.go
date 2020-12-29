@@ -9,46 +9,85 @@ import (
 	"github.com/pubgo/xlog"
 )
 
-type Value interface {
-	rawValues() []reflect.Value // block
-	pipe(fn interface{}) Value  // async callback
-	Value(fn interface{})       // async callback
-	Get() interface{}           // block wait for value
+type FutureValue interface {
+	raw() []reflect.Value            // block
+	Get() interface{}                // block wait for value
+	pipe(fn interface{}) FutureValue // async callback
+	Value(fn interface{})            // async callback
+	Err(func(err error))             // async callback
 }
 
-var _ Value = (*futureValue)(nil)
+var _ FutureValue = (*futureValue)(nil)
 
 type futureValue struct {
-	val    func() []reflect.Value
-	values []reflect.Value
-	done   sync.Once
+	val     func() []reflect.Value
+	values  []reflect.Value
+	err     func() error
+	done    sync.Once
+	errCall func(err error)
 }
 
-func (v *futureValue) pipe(fn interface{}) Value {
+func (v *futureValue) raw() []reflect.Value   { return v.getVal() }
+func (v *futureValue) Err(fn func(err error)) { v.errCall = fn }
+func (v *futureValue) checkErr(err error, fn interface{}) bool {
+	if err == nil {
+		return false
+	}
+
+	var fields = []xlog.Field{xlog.Any("err", v.err())}
+	if fn != nil {
+		fields = append(fields, xlog.String("func", xerror_util.CallerWithFunc(fn)))
+	}
+	if v.errCall == nil {
+		xlog.Error("futureValue.checkErr", fields...)
+		return true
+	}
+
+	v.errCall(err)
+	return true
+}
+
+func (v *futureValue) pipe(fn interface{}) FutureValue {
 	var values = make(chan []reflect.Value)
+	var err error
 	go func() {
-		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("futureValue.pipe panic", xlog.Any("err", err)) })
-		values <- reflect.ValueOf(fn).Call(v.getVal())
+		val := v.getVal()
+		if err = v.err(); err != nil {
+			v.checkErr(err, fn)
+			values <- nil
+			return
+		}
+
+		defer xerror.Resp(func(err1 xerror.XErr) { err = err1; values <- nil })
+		values <- reflect.ValueOf(fn).Call(val)
 	}()
-	return &futureValue{val: func() []reflect.Value { return <-values }}
+	return &futureValue{val: func() []reflect.Value { return <-values }, err: func() error { return err }}
 }
 
 func (v *futureValue) getVal() []reflect.Value {
-	v.done.Do(func() { v.values = v.val(); v.val = nil })
+	v.done.Do(func() { v.values = v.val() })
 	return v.values
 }
 
-func (v *futureValue) rawValues() []reflect.Value {
-	return v.getVal()
-}
-
 func (v *futureValue) Value(fn interface{}) {
-	defer xerror.Resp(func(err xerror.XErr) { xerror.PanicF(err, xerror_util.CallerWithFunc(fn)) })
-	reflect.ValueOf(fn).Call(v.getVal())
+	go func() {
+		val := v.getVal()
+		if v.checkErr(v.err(), fn) {
+			return
+		}
+
+		defer xerror.Resp(func(err xerror.XErr) { v.checkErr(v.err(), fn) })
+		reflect.ValueOf(fn).Call(val)
+	}()
+
 }
 
 func (v *futureValue) Get() interface{} {
 	values := v.getVal()
+	if v.checkErr(v.err(), nil) {
+		return nil
+	}
+
 	if len(values) == 0 {
 		return nil
 	}
@@ -59,19 +98,15 @@ func (v *futureValue) Get() interface{} {
 
 	if len(values) == 2 {
 		if values[1].IsValid() && !values[1].IsNil() {
-			xerror.Next().Panic(values[1].Interface().(error))
+			v.checkErr(values[1].Interface().(error), nil)
+			return nil
 		}
 
 		if !values[0].IsValid() || values[0].IsNil() {
 			return nil
 		}
 
-		val := values[0].Interface()
-		if val1, ok := val.(Value); ok {
-			defer xerror.RespRaise("futureValue.Get")
-			return val1.Get()
-		}
-		return val
+		return values[0].Interface()
 	}
 
 	return nil

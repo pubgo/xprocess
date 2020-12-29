@@ -13,60 +13,100 @@ var ErrInputOutputParamsNotMatch = xerror.New("the input num and output num of t
 var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback func is not match")
 var ErrCallBackInValid = xerror.New("the func is invalid")
 
-type IFuture interface {
-	Value(fn interface{})
+type Future interface {
+	Err(func(err error)) Future
+	Value(fn interface{}) Future
+	Cancelled() bool
+	Done() bool
+	Chan() <-chan interface{}
 }
 
 type Yield interface {
-	Yield(data interface{})
-	Await(val Value, fn ...interface{})
+	Yield(data interface{}, fn ...interface{})
+	Await(val FutureValue, fn interface{})
+	Cancel()
 }
 
 type future struct {
-	wg   sync.WaitGroup
-	data chan Value
-	done sync.Once
+	wg      WaitGroup
+	data    chan FutureValue
+	done    sync.Once
+	errCall func(err error)
 }
 
-func (s *future) inc() { s.wg.Add(1) }
-func (s *future) Await(val Value, pipe ...interface{}) {
-	s.inc()
-	if len(pipe) > 0 {
-		val = val.pipe(pipe[0])
-	}
-	go func() { s.data <- val }()
+func (s *future) Await(val FutureValue, fn interface{}) { val.Value(fn) }
+func (s *future) Err(f func(err error)) Future          { s.errCall = f; return s }
+func (s *future) Cancelled() bool {
+	panic("implement me")
 }
 
-func (s *future) Yield(data interface{}) {
-	if val, ok := data.(Value); ok {
-		s.Await(val)
+func (s *future) Done() bool {
+	panic("implement me")
+}
+
+func (s *future) cancel() {}
+func (s *future) Cancel() { s.waitForClose() }
+func (s *future) Yield(data interface{}, fn ...interface{}) {
+	if val, ok := data.(FutureValue); ok {
+		if len(fn) > 0 {
+
+		}
+
+		s.wg.Inc()
+		go func() { s.data <- val }()
 		return
 	}
 
-	s.inc()
-	go func() {
-		s.data <- &futureValue{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }}
-	}()
+	if val, ok := data.(func()); ok {
+		go func() {
+			defer xerror.Resp(func(err xerror.XErr) {
+				xlog.Error("future.Yield panic", xlog.Any("err", err))
+				s.Cancel()
+			})
+
+			val()
+		}()
+		return
+	}
+
+	s.wg.Inc()
+	go func() { s.data <- &futureValue{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }} }()
 }
 
-func (s *future) close() { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
-func (s *future) Value(fn interface{}) {
-	s.close()
+func (s *future) waitForClose() { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
+func (s *future) Chan() <-chan interface{} {
+	s.waitForClose()
+
+	var data = make(chan interface{})
+	go func() {
+		for val := range s.data {
+			val.Err(s.errCall)
+			s.wg.Done()
+			data <- val.Get()
+		}
+	}()
+	return data
+}
+
+func (s *future) Value(fn interface{}) Future {
+	s.waitForClose()
 
 	vfn := reflect.ValueOf(fn)
 	for data := range s.data {
-		go func(val Value) { defer s.wg.Done(); vfn.Call(val.rawValues()) }(data)
+		go func(val FutureValue) { defer s.wg.Done(); vfn.Call(val.raw()) }(data)
 	}
+
+	return s
 }
 
-func Future(fn func(y Yield)) IFuture {
-	s := &future{data: make(chan Value)}
-	s.inc()
+func Promise(fn func(y Yield)) Future {
+	s := &future{data: make(chan FutureValue)}
+	s.wg.Inc()
 	go func() { defer s.wg.Done(); fn(s) }()
 	return s
 }
 
-func Async(fn interface{}, args ...interface{}) Value {
+func Async(fn interface{}, args ...interface{}) FutureValue {
 	vfn := reflect.ValueOf(fn)
 	if vfn.Kind() != reflect.Func {
 		xerror.Next().Panic(xerror.New("[fn] type should be func"))
@@ -99,12 +139,15 @@ func Async(fn interface{}, args ...interface{}) Value {
 	}
 
 	var val = make(chan []reflect.Value)
+	var err error
 	go func() {
-		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("Async panic", xlog.Any("err", err)) })
+		defer xerror.Resp(func(err1 xerror.XErr) { err = err1; val <- nil })
 		val <- vfn.Call(values)
 	}()
-	return &futureValue{val: func() []reflect.Value { return <-val }}
+	return &futureValue{val: func() []reflect.Value { return <-val }, err: func() error { return err }}
 }
+
+func Await(val FutureValue, fn interface{}) FutureValue { return val.pipe(fn) }
 
 func _Await(fn interface{}, args ...interface{}) func(fn ...interface{}) {
 	vfn := reflect.ValueOf(fn)
