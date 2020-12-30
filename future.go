@@ -34,12 +34,38 @@ type future struct {
 	errCall func(err error)
 }
 
-func (s *future) Await(val FutureValue, fn interface{}) { val.Value(fn) }
-func (s *future) Err(f func(err error)) Future          { s.errCall = f; return s }
-func (s *future) Cancelled() bool                       { return true }
-func (s *future) Done() bool                            { return true }
-func (s *future) cancel()                               {}
-func (s *future) Cancel()                               { s.waitForClose() }
+func (s *future) checkErr(err error, fn interface{}) bool {
+	if err == nil {
+		return false
+	}
+
+	var fields = []xlog.Field{xlog.Any("err", err)}
+	if fn != nil {
+		fields = append(fields, xlog.String("func", xerror_util.CallerWithFunc(fn)))
+	}
+	if s.errCall == nil {
+		xlog.Error("future.checkErr", fields...)
+		return true
+	}
+
+	s.errCall(err)
+	return true
+}
+
+func (s *future) Await(v FutureValue, fn interface{}) {
+	s.wg.Inc()
+	go func() {
+		defer s.wg.Done()
+		v.Err(s.errCall)
+		v.Value(fn)
+	}()
+}
+
+func (s *future) Err(f func(err error)) Future { s.errCall = f; return s }
+func (s *future) Cancelled() bool              { return true }
+func (s *future) Done() bool                   { return true }
+func (s *future) cancel()                      {}
+func (s *future) Cancel()                      { s.waitForClose() }
 func (s *future) Yield(data interface{}) {
 	if val, ok := data.(FutureValue); ok {
 		s.wg.Inc()

@@ -29,15 +29,18 @@ func getData() Future {
 			}
 
 			val := Async(http.Get, "https://www.cnblogs.com")
+			val = val.pipe(func() {
+
+			})
 			head := Await(val, func(resp *http.Response, err error) http.Header {
 				xerror.Panic(err)
 				resp.Header.Add("test", "11111")
 				return resp.Header
 			})
 
-			val1 := Await(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response{
+			val1 := Await(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response {
 				resp.Header.Set("dddd", "hhhh")
-				head.Value(func(head http.Header) {resp.Header = head})
+				head.Value(func(head http.Header) { resp.Header = head })
 				return resp
 			})
 

@@ -34,7 +34,7 @@ func (v *futureValue) checkErr(err error, fn interface{}) bool {
 		return false
 	}
 
-	var fields = []xlog.Field{xlog.Any("err", v.err())}
+	var fields = []xlog.Field{xlog.Any("err", err)}
 	if fn != nil {
 		fields = append(fields, xlog.String("func", xerror_util.CallerWithFunc(fn)))
 	}
