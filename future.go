@@ -1,24 +1,19 @@
 package xprocess
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_util"
-	"github.com/pubgo/xlog"
+	"go.uber.org/atomic"
 )
 
-var ErrInputOutputParamsNotMatch = xerror.New("the input num and output num of the callback func is not match")
-var ErrFuncOutputTypeNotMatch = xerror.New("the  output type of the callback func is not match")
-var ErrCallBackInValid = xerror.New("the func is invalid")
-
 type Future interface {
-	Err(func(err error)) Future
-	Value(fn interface{}) Future
+	Value(fn interface{})
 	Cancelled() bool
-	Done() bool
-	Chan() <-chan interface{}
+	Wait() error
 }
 
 type Yield interface {
@@ -28,45 +23,31 @@ type Yield interface {
 }
 
 type future struct {
-	wg      WaitGroup
-	data    chan FutureValue
-	done    sync.Once
-	errCall func(err error)
+	wg        WaitGroup
+	data      chan FutureValue
+	done      sync.Once
+	cancelled atomic.Bool
+	err       atomic.Error
 }
 
-func (s *future) checkErr(err error, fn interface{}) bool {
-	if err == nil {
-		return false
-	}
-
-	var fields = []xlog.Field{xlog.Any("err", err)}
-	if fn != nil {
-		fields = append(fields, xlog.String("func", xerror_util.CallerWithFunc(fn)))
-	}
-	if s.errCall == nil {
-		xlog.Error("future.checkErr", fields...)
-		return true
-	}
-
-	s.errCall(err)
-	return true
-}
-
+func (s *future) waitForClose()   { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
+func (s *future) Wait() error     { s.wg.Wait(); return s.err.Load() }
+func (s *future) Cancelled() bool { return s.cancelled.Load() }
+func (s *future) Cancel()         { s.cancelled.Store(true) }
 func (s *future) Await(v FutureValue, fn interface{}) {
+	if s.cancelled.Load() {
+		return
+	}
+
 	s.wg.Inc()
-	go func() {
-		defer s.wg.Done()
-		v.Err(s.errCall)
-		v.Value(fn)
-	}()
+	go func() { defer s.wg.Done(); v.Value(fn) }()
 }
 
-func (s *future) Err(f func(err error)) Future { s.errCall = f; return s }
-func (s *future) Cancelled() bool              { return true }
-func (s *future) Done() bool                   { return true }
-func (s *future) cancel()                      {}
-func (s *future) Cancel()                      { s.waitForClose() }
 func (s *future) Yield(data interface{}) {
+	if s.cancelled.Load() {
+		return
+	}
+
 	if val, ok := data.(FutureValue); ok {
 		s.wg.Inc()
 		go func() { s.data <- val }()
@@ -78,7 +59,7 @@ func (s *future) Yield(data interface{}) {
 		go func() {
 			defer s.wg.Done()
 			defer xerror.Resp(func(err xerror.XErr) {
-				xlog.Error("future.Yield panic", xlog.Any("err", err))
+				s.err.Store(err)
 				s.Cancel()
 			})
 
@@ -88,33 +69,61 @@ func (s *future) Yield(data interface{}) {
 	}
 
 	s.wg.Inc()
-	go func() { s.data <- &futureValue{val: func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }} }()
+	value := futureValueGet()
+	value.val = func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }
+	go func() { s.data <- value }()
 }
 
-func (s *future) waitForClose() { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
-func (s *future) Chan() <-chan interface{} {
-	s.waitForClose()
-
-	var data = make(chan interface{})
-	go func() {
-		for val := range s.data {
-			val.Err(s.errCall)
-			s.wg.Done()
-			data <- val.Get()
-		}
-	}()
-	return data
-}
-
-func (s *future) Value(fn interface{}) Future {
+func (s *future) Value(fn interface{}) {
 	s.waitForClose()
 
 	vfn := reflect.ValueOf(fn)
 	for data := range s.data {
-		go func(val FutureValue) { defer s.wg.Done(); vfn.Call(val.raw()) }(data)
+		func() {
+			defer futureValuePut(data.(*futureValue))
+			defer s.wg.Done()
+			defer xerror.RespRaise(func(err xerror.XErr) error {
+				s.Cancel()
+				return xerror.WrapF(err, xerror_util.CallerWithFunc(fn))
+			})
+			vfn.Call(data.Get())
+		}()
+	}
+}
+
+func Map(data interface{}, fn interface{}) interface{} {
+	vfn := reflect.ValueOf(fn)
+	vd := reflect.ValueOf(data)
+	_l := vd.Len()
+	var values []FutureValue
+	for i := 0; i < _l; i++ {
+		values = append(values, Async(vfn, vd.Index(i)))
 	}
 
-	return s
+	var _t reflect.Type
+	if vfn.Type().NumOut() > 0 {
+		_t = vfn.Type().Out(0)
+	}
+
+	if _t == nil {
+		return nil
+	}
+
+	var values1 = valueGet()
+	for i := range values {
+		val := values[i].Get()[0]
+		if !val.IsValid() {
+			val = reflect.Zero(_t)
+		}
+		values1 = append(values1, val)
+	}
+
+	_rst := reflect.MakeSlice(reflect.SliceOf(_t), 0, _l)
+	for i := range values1 {
+		_rst = reflect.Append(_rst, values1[i])
+	}
+
+	return _rst.Interface()
 }
 
 func Promise(fn func(y Yield)) Future {
@@ -122,107 +131,53 @@ func Promise(fn func(y Yield)) Future {
 	s.wg.Inc()
 	go func() {
 		defer s.wg.Done()
-		defer xerror.RespExit()
+		defer xerror.Resp(func(err xerror.XErr) {
+			s.err.Store(err)
+			s.Cancel()
+		})
 		fn(s)
 	}()
 	return s
 }
 
 func Async(fn interface{}, args ...interface{}) FutureValue {
-	vfn := reflect.ValueOf(fn)
-	if vfn.Kind() != reflect.Func {
-		xerror.Next().Panic(xerror.New("[fn] type should be func"))
-	}
-
-	if !vfn.IsValid() || vfn.IsNil() {
-		xerror.Next().Panic(xerror.New("[fn] should not be nil"))
-	}
-
-	var values = valueGet()
-	defer valuePut(values)
-
-	for _, k := range args {
-		values = append(values, reflect.ValueOf(k))
-	}
-
-	for i, k := range values {
-		if !k.IsValid() {
-			values[i] = reflect.New(vfn.Type().In(i)).Elem()
-			continue
-		}
-
-		switch k.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
-			if k.IsNil() {
-				values[i] = reflect.New(vfn.Type().In(i)).Elem()
-				continue
-			}
-		}
-	}
-
-	var val = make(chan []reflect.Value)
 	var err error
+	var value = futureValueGet()
+	var val = make(chan []reflect.Value)
 	go func() {
-		defer xerror.Resp(func(err1 xerror.XErr) { err = err1; val <- nil })
-		val <- vfn.Call(values)
+		defer xerror.Resp(func(err1 xerror.XErr) {
+			err = xerror.WrapF(err1, "input:%#v, func:%s, caller:%s", args, reflect.TypeOf(fn), xerror_util.CallerWithFunc(fn))
+			val <- nil
+		})
+		val <- xerror_util.FuncRaw(fn)(args...)
 	}()
-	return &futureValue{val: func() []reflect.Value { return <-val }, err: func() error { return err }}
+
+	value.val = func() []reflect.Value { return <-val }
+	value.err = func() error { return err }
+	return value
 }
 
-func Await(val FutureValue, fn interface{}) FutureValue { return val.pipe(fn) }
+func Await(val FutureValue, fn interface{}) FutureValue {
+	var err error
+	var value = futureValueGet()
+	var values = make(chan []reflect.Value)
 
-func _Await(fn interface{}, args ...interface{}) func(fn ...interface{}) {
-	vfn := reflect.ValueOf(fn)
-
-	var values = valueGet()
-	defer valuePut(values)
-
-	for _, k := range args {
-		values = append(values, reflect.ValueOf(k))
-	}
-
-	for i, k := range values {
-		if !k.IsValid() {
-			args[i] = reflect.New(vfn.Type().In(i)).Elem()
-			continue
-		}
-
-		switch k.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
-			if k.IsNil() {
-				args[i] = reflect.New(vfn.Type().In(i)).Elem()
-				continue
-			}
-		}
-
-		values[i] = k
-	}
-
-	return func(fn ...interface{}) {
-		if len(fn) == 0 {
+	go func() {
+		v := val.Get()
+		if err = val.Err(); err != nil {
+			values <- nil
 			return
 		}
 
-		var cfn reflect.Value
-		cfn = reflect.ValueOf(fn[0])
-		if !cfn.IsValid() || cfn.IsZero() {
-			xerror.Next().Panic(ErrCallBackInValid)
-		}
-
-		if cfn.Type().NumIn() != vfn.Type().NumOut() {
-			xerror.Next().PanicF(ErrInputOutputParamsNotMatch, "fn:%s, [%d]--[%d]", xerror_util.CallerWithFunc(fn[0]), cfn.Type().NumIn(), vfn.Type().NumOut())
-		}
-
-		if cfn.Type().NumIn() != 0 && cfn.Type().In(0) != vfn.Type().Out(0) {
-			xerror.Next().PanicF(ErrFuncOutputTypeNotMatch, "fn:%s, [%s]--[%s]", xerror_util.CallerWithFunc(fn[0]), cfn.Type().In(0), vfn.Type().Out(0))
-		}
-
-		go func() {
-			defer xerror.Resp(func(err xerror.XErr) { xlog.Error("Await panic", xlog.Any("err", err)) })
-			val := vfn.Call(values)
-			cfn.Call(val)
-		}()
-	}
+		defer xerror.Resp(func(err1 xerror.XErr) {
+			err = xerror.WrapF(err1, "input:%#v, func:%#v", v, reflect.TypeOf(fn))
+			values <- nil
+		})
+		values <- reflect.ValueOf(fn).Call(v)
+	}()
+	value.val = func() []reflect.Value { return <-values }
+	value.err = func() error { return err }
+	return value
 }
 
 var _valuePool = sync.Pool{
@@ -237,4 +192,16 @@ func valueGet() []reflect.Value {
 
 func valuePut(v []reflect.Value) {
 	_valuePool.Put(v[:0])
+}
+
+func valueStr(values ...reflect.Value) string {
+	var data []interface{}
+	for _, dt := range values {
+		var val interface{}
+		if dt.IsValid() {
+			val = dt.Interface()
+		}
+		data = append(data, val)
+	}
+	return fmt.Sprint(data...)
 }
