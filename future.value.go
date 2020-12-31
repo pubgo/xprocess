@@ -25,12 +25,13 @@ type futureValue struct {
 }
 
 func (v *futureValue) String() string {
-	xerror.Next().Exit(v.Err())
+	xerror.Next().Panic(v.Err())
 	return valueStr(v.getVal()...)
 }
 
 func (v *futureValue) Get() []reflect.Value { return v.getVal() }
 func (v *futureValue) Err() error {
+	_ = v.getVal()
 	if v.err == nil {
 		return nil
 	}
@@ -43,14 +44,12 @@ func (v *futureValue) getVal() []reflect.Value {
 
 func (v *futureValue) Value(fn interface{}) {
 	val := v.getVal()
-	if err := v.Err(); err != nil {
-		xerror.Next().PanicF(err, xerror_util.CallerWithFunc(fn))
-	}
+	xerror.Next().Panic(v.Err())
 
 	defer xerror.RespRaise(func(err xerror.XErr) error {
-		return xerror.WrapF(err, "input:%s, func:%#v", valueStr(val...), reflect.TypeOf(fn))
+		return xerror.WrapF(err, "input:%s, func:%s", valueStr(val...), reflect.TypeOf(fn))
 	})
-	reflect.ValueOf(fn).Call(val)
+	xerror_util.FuncValue(fn)(val...)
 }
 
 var _futureValue = sync.Pool{

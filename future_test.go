@@ -85,7 +85,7 @@ func TestGetData(t *testing.T) {
 	defer xerror.Resp(func(err xerror.XErr) {
 		fmt.Println(err.Println())
 	})
-	getData().Value(func(resp *http.Response, err error) {
+	getData().Value(func(resp *http.Response) {
 		fmt.Println(resp)
 	})
 }
@@ -125,8 +125,6 @@ func TestName11w(t *testing.T) {
 }
 
 func TestMap(t *testing.T) {
-	dt := Map([]string{"111", "222"}, func(s string) string {
-		return s+"mmm"
-	})
+	dt := Map([]string{"111", "222"}, func(s string) string { return s + "mmm" })
 	fmt.Println(dt.([]string)[0])
 }
