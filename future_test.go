@@ -82,9 +82,7 @@ func TestAsync(t *testing.T) {
 }
 
 func TestGetData(t *testing.T) {
-	defer xerror.Resp(func(err xerror.XErr) {
-		fmt.Println(err.Println())
-	})
+	defer xerror.RespExit()
 	getData().Value(func(resp *http.Response) {
 		fmt.Println(resp)
 	})
