@@ -63,9 +63,7 @@ func futureValueGet() *futureValue {
 }
 
 func futureValuePut(val *futureValue) {
-	go func() {
-		val.values = val.values[:0]
-		val.done = sync.Once{}
-		_futureValue.Put(val)
-	}()
+	val.values = val.values[:0]
+	val.done = sync.Once{}
+	_futureValue.Put(val)
 }

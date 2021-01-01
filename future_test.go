@@ -18,8 +18,8 @@ func asyncHandleReq(i int) FutureValue {
 	return Async(http.Get, "https://www.cnblogs.com")
 }
 
-func getData() Future {
-	return Promise(func(y Yield) {
+func getData() IPromise {
+	return Promise(func(y Future) {
 		for i := 10; i > 0; i-- {
 			i := i
 			if i <= 3 {
@@ -33,7 +33,7 @@ func getData() Future {
 				return resp.Header
 			})
 
-			_ = Await(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response {
+			y.Yield(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response {
 				resp.Header.Set("dddd", "hhhh")
 				head.Value(func(head http.Header) { resp.Header = head })
 				return resp
@@ -49,8 +49,8 @@ func getData() Future {
 	})
 }
 
-func handleData() Future {
-	return Promise(func(y Yield) {
+func handleData() IPromise {
+	return Promise(func(y Future) {
 		s := getData()
 		s.Value(func(resp *http.Response) {
 			head := resp.Header
@@ -90,26 +90,26 @@ func TestGetData(t *testing.T) {
 	})
 }
 
-func handleData2() Future {
-	return Promise(func(y Yield) {
+func handleData2() IPromise {
+	return Promise(func(g Future) {
 		for i := 10; i > 0; i-- {
 			i := i
-			y.Yield(i)
-			y.Yield(func() {
+			g.Yield(i)
+			g.Yield(func() {
 				if i == 5 {
 					xerror.Panic(xerror.New("error test"))
 				}
 
 				resp, err := http.Get("https://www.cnblogs.com")
 				xerror.Panic(err)
-				y.Yield(resp)
+				g.Yield(resp)
 
 				asyncHandleReq(1).Value(func(resp *http.Response, _ error) {
-					y.Yield(resp)
+					g.Yield(resp)
 				})
 
-				y.Await(asyncHandleReq(1), func(resp *http.Response, _ error) {
-					y.Yield(resp)
+				g.Await(asyncHandleReq(1), func(resp *http.Response, _ error) {
+					g.Yield(resp)
 				})
 			})
 		}

@@ -2,6 +2,7 @@ package xprocess
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"sync"
 	"time"
@@ -69,7 +70,7 @@ func (t *process) goLoopCtx(fn func(ctx context.Context) error) context.CancelFu
 			case <-ctx.Done():
 				return
 			default:
-				err := fn(ctx)
+				err := errors.Unwrap(fn(ctx))
 				if err == Break {
 					return
 				}

@@ -10,19 +10,19 @@ import (
 	"go.uber.org/atomic"
 )
 
-type Future interface {
+type IPromise interface {
 	Wait() error
 	Cancelled() bool
-	Value(fn interface{})
+	Value(fn interface{}) // block
 }
 
-type Yield interface {
+type Future interface {
 	Cancel()
-	Yield(data interface{}, fn ...interface{})
-	Await(val FutureValue, fn interface{})
+	Yield(data interface{}, fn ...interface{}) // async
+	Await(val FutureValue, fn interface{})     // block
 }
 
-type future struct {
+type promise struct {
 	wg        WaitGroup
 	data      chan FutureValue
 	done      sync.Once
@@ -30,7 +30,7 @@ type future struct {
 	err       atomic.Error
 }
 
-func (s *future) Await(val FutureValue, fn interface{}) {
+func (s *promise) Await(val FutureValue, fn interface{}) {
 	if s.cancelled.Load() {
 		return
 	}
@@ -40,11 +40,11 @@ func (s *future) Await(val FutureValue, fn interface{}) {
 	val.Value(fn)
 }
 
-func (s *future) waitForClose()   { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
-func (s *future) Wait() error     { s.wg.Wait(); return s.err.Load() }
-func (s *future) Cancelled() bool { return s.cancelled.Load() }
-func (s *future) Cancel()         { s.cancelled.Store(true) }
-func (s *future) Yield(data interface{}, fn ...interface{}) {
+func (s *promise) waitForClose()   { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
+func (s *promise) Wait() error     { s.wg.Wait(); return s.err.Load() }
+func (s *promise) Cancelled() bool { return s.cancelled.Load() }
+func (s *promise) Cancel()         { s.cancelled.Store(true) }
+func (s *promise) Yield(data interface{}, fn ...interface{}) {
 	if s.cancelled.Load() {
 		return
 	}
@@ -79,7 +79,7 @@ func (s *future) Yield(data interface{}, fn ...interface{}) {
 	go func() { s.data <- value }()
 }
 
-func (s *future) Value(fn interface{}) {
+func (s *promise) Value(fn interface{}) {
 	s.waitForClose()
 
 	vfn := xerror_util.FuncValue(fn)
@@ -124,8 +124,8 @@ func Map(data interface{}, fn interface{}) interface{} {
 	return _rst.Interface()
 }
 
-func Promise(fn func(y Yield)) Future {
-	s := &future{data: make(chan FutureValue)}
+func Promise(fn func(g Future)) IPromise {
+	s := &promise{data: make(chan FutureValue)}
 	s.wg.Inc()
 	go func() {
 		defer s.wg.Done()

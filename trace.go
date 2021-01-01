@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	dix_trace.With(func(ctx *dix_trace.TraceCtx) {
+	dix_trace.With(func(ctx *dix_trace.Ctx) {
 		ctx.Func("xprocess", func() interface{} {
 			var _data = make(map[string]int32)
 			data.Range(func(key, value interface{}) bool {
