@@ -8,11 +8,11 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xprocess"
+	"github.com/pubgo/xprocess/xprocess_group"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCancel(t *testing.T) {
-	fmt.Println(xprocess.Stack())
 	cancel := xprocess.Go(func(ctx context.Context) {
 		for {
 			select {
@@ -26,14 +26,11 @@ func TestCancel(t *testing.T) {
 	})
 
 	time.Sleep(time.Second)
-	fmt.Println(xprocess.Stack())
 	cancel()
 	time.Sleep(time.Second)
-	fmt.Println(xprocess.Stack())
 }
 
 func TestName(t *testing.T) {
-	fmt.Println(xprocess.Stack())
 	for {
 		xprocess.Go(func(ctx context.Context) {
 			time.Sleep(time.Second)
@@ -41,13 +38,12 @@ func TestName(t *testing.T) {
 			return
 		})
 
-		xprocess.GoLoop(func(ctx context.Context) error {
+		xprocess.GoLoop(func(ctx context.Context) {
 			time.Sleep(time.Second)
 			fmt.Println("g3")
-			return nil
 		})
 
-		g := xprocess.NewGroup()
+		g := xprocess_group.New()
 		g.Go(func(ctx context.Context) {
 			fmt.Println("g4")
 		})
@@ -65,21 +61,18 @@ func TestName(t *testing.T) {
 
 		g.Cancel()
 
-		fmt.Println(xprocess.Stack())
 		time.Sleep(time.Second)
 	}
 }
 
 func TestTimeout(t *testing.T) {
-	err := xprocess.Timeout(time.Second, func(ctx context.Context) error {
+	err := xprocess.Timeout(time.Second, func(ctx context.Context) {
 		time.Sleep(time.Millisecond * 990)
-		return nil
 	})
 	assert.Nil(t, err)
 
-	err = xprocess.Timeout(time.Second, func(ctx context.Context) error {
+	err = xprocess.Timeout(time.Second, func(ctx context.Context) {
 		time.Sleep(time.Second + time.Millisecond*10)
-		return nil
 	})
 	assert.NotNil(t, err)
 }

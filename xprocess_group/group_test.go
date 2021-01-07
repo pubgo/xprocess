@@ -1,4 +1,4 @@
-package xprocess
+package xprocess_group
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestGroup(t *testing.T) {
-	g := NewGroup(WithConcurrency(5))
+	g := New(5)
 	for i := 30; i > 0; i-- {
 		i := i
 		g.Go(func(ctx context.Context) {

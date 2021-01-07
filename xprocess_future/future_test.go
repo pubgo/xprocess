@@ -1,4 +1,4 @@
-package xprocess
+package xprocess_future
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pubgo/xerror"
+	"github.com/pubgo/xprocess/xprocess_abc"
 )
 
 func handleReq(i int) (resp *http.Response, err error) {
@@ -13,13 +14,13 @@ func handleReq(i int) (resp *http.Response, err error) {
 	return http.Get("https://www.cnblogs.com")
 }
 
-func asyncHandleReq(i int) FutureValue {
+func asyncHandleReq(i int) xprocess_abc.FutureValue {
 	fmt.Println("url", i)
 	return Async(http.Get, "https://www.cnblogs.com")
 }
 
-func getData() IPromise {
-	return Promise(func(y Future) {
+func getData() xprocess_abc.IPromise {
+	return Promise(func(y xprocess_abc.Future) {
 		for i := 10; i > 0; i-- {
 			i := i
 			if i <= 3 {
@@ -49,8 +50,8 @@ func getData() IPromise {
 	})
 }
 
-func handleData() IPromise {
-	return Promise(func(y Future) {
+func handleData() xprocess_abc.IPromise {
+	return Promise(func(y xprocess_abc.Future) {
 		s := getData()
 		s.Value(func(resp *http.Response) {
 			head := resp.Header
@@ -88,8 +89,8 @@ func TestGetData(t *testing.T) {
 	})
 }
 
-func handleData2() IPromise {
-	return Promise(func(g Future) {
+func handleData2() xprocess_abc.IPromise {
+	return Promise(func(g xprocess_abc.Future) {
 		for i := 10; i > 0; i-- {
 			i := i
 			g.Yield(i)

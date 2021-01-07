@@ -1,4 +1,4 @@
-package xprocess
+package xprocess_future
 
 import (
 	"reflect"
@@ -6,16 +6,10 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_util"
+	"github.com/pubgo/xprocess/xprocess_abc"
 )
 
-type FutureValue interface {
-	Err() error
-	String() string
-	Get() []reflect.Value
-	Value(fn interface{})
-}
-
-var _ FutureValue = (*futureValue)(nil)
+var _ xprocess_abc.FutureValue = (*futureValue)(nil)
 
 type futureValue struct {
 	val    func() []reflect.Value

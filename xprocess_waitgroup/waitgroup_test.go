@@ -1,4 +1,4 @@
-package xprocess
+package xprocess_waitgroup
 
 import (
 	"fmt"
