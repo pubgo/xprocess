@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/pubgo/xerror"
+	"github.com/pubgo/xerror/xerror_abc"
 	"github.com/pubgo/xerror/xerror_util"
 	"github.com/pubgo/xprocess/xprocess_abc"
 )
@@ -12,10 +13,10 @@ import (
 var _ xprocess_abc.FutureValue = (*futureValue)(nil)
 
 type futureValue struct {
-	val    func() []reflect.Value
-	err    func() error
-	values []reflect.Value
 	done   sync.Once
+	values []reflect.Value
+	err    func() error
+	val    func() []reflect.Value
 }
 
 func (v *futureValue) String() string {
@@ -29,33 +30,38 @@ func (v *futureValue) Err() error {
 	if v.err == nil {
 		return nil
 	}
+
 	return v.err()
 }
+
 func (v *futureValue) getVal() []reflect.Value {
-	v.done.Do(func() { v.values = v.val() })
+	v.done.Do(func() {
+		if v.val == nil {
+			return
+		}
+
+		v.values = v.val()
+		v.val = nil
+	})
+
 	return v.values
 }
 
-func (v *futureValue) Value(fn interface{}) {
+func (v *futureValue) Value(fn interface{}) (gErr error) {
+	defer xerror.Resp(func(err xerror_abc.XErr) {
+		gErr = xerror.WrapF(err, "input:%s, func:%s", valueStr(v.getVal()...), reflect.TypeOf(fn))
+	})
+
 	val := v.getVal()
 	xerror.Next().Panic(v.Err())
 
-	defer xerror.RespRaise(func(err xerror.XErr) error {
-		return xerror.WrapF(err, "input:%s, func:%s", valueStr(val...), reflect.TypeOf(fn))
-	})
 	xerror_util.FuncValue(fn)(val...)
+	return
 }
 
-var _futureValue = sync.Pool{
-	New: func() interface{} {
-		return &futureValue{}
-	},
-}
+var _futureValue = sync.Pool{New: func() interface{} { return &futureValue{} }}
 
-func futureValueGet() *futureValue {
-	return _futureValue.Get().(*futureValue)
-}
-
+func futureValueGet() *futureValue { return _futureValue.Get().(*futureValue) }
 func futureValuePut(val *futureValue) {
 	val.values = val.values[:0]
 	val.done = sync.Once{}

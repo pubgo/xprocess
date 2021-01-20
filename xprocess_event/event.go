@@ -16,7 +16,7 @@
  *
  */
 
-// Package grpcsync implements additional synchronization primitives built upon
+// Package xprocess_event implements additional synchronization primitives built upon
 // the sync package.
 
 package xprocess_event
@@ -47,16 +47,10 @@ func (e *Event) Fire() bool {
 }
 
 // Done returns a channel that will be closed when Fire is called.
-func (e *Event) Done() <-chan struct{} {
-	return e.c
-}
+func (e *Event) Done() <-chan struct{} { return e.c }
 
 // HasFired returns true if Fire has been called.
-func (e *Event) HasFired() bool {
-	return atomic.LoadInt32(&e.fired) == 1
-}
+func (e *Event) HasFired() bool { return atomic.LoadInt32(&e.fired) == 1 }
 
 // NewEvent returns a new, ready-to-use Event.
-func New() *Event {
-	return &Event{c: make(chan struct{})}
-}
+func New() *Event { return &Event{c: make(chan struct{})} }

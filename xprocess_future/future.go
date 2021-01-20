@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/pubgo/xerror"
+	"github.com/pubgo/xerror/xerror_abc"
 	"github.com/pubgo/xerror/xerror_util"
 	"github.com/pubgo/xprocess/xprocess_abc"
 	"github.com/pubgo/xprocess/xprocess_waitgroup"
@@ -20,14 +21,22 @@ type promise struct {
 	err       atomic.Error
 }
 
-func (s *promise) Await(val xprocess_abc.FutureValue, fn interface{}) {
+func (s *promise) Go(fn func()) {
+	s.wg.Inc()
+	go func() {
+		defer s.wg.Done()
+		defer xerror.Resp(func(err xerror.XErr) { s.Cancel(); s.err.Store(err) })
+
+		fn()
+	}()
+}
+
+func (s *promise) Await(val xprocess_abc.FutureValue, fn interface{}) error {
 	if s.cancelled.Load() {
-		return
+		return nil
 	}
 
-	xerror.Next().Panic(val.Err())
-
-	val.Value(fn)
+	return xerror.Wrap(val.Value(fn))
 }
 
 func (s *promise) waitForClose()   { s.done.Do(func() { go func() { s.wg.Wait(); close(s.data) }() }) }
@@ -39,60 +48,56 @@ func (s *promise) Yield(data interface{}, fn ...interface{}) {
 		return
 	}
 
+	// 处理xprocess_abc.FutureValue, 如果fn存在, 那么就调用Await
 	if val, ok := data.(xprocess_abc.FutureValue); ok {
-		s.wg.Inc()
 		if len(fn) > 0 {
 			val = Await(val, fn[0])
 		}
 
+		s.wg.Inc()
 		go func() { s.data <- val }()
 		return
 	}
 
 	if val, ok := data.(func()); ok {
-		s.wg.Inc()
-		go func() {
-			defer s.wg.Done()
-			defer xerror.Resp(func(err xerror.XErr) {
-				s.err.Store(err)
-				s.Cancel()
-			})
-
-			val()
-		}()
+		s.Go(val)
 		return
 	}
 
 	s.wg.Inc()
 	value := futureValueGet()
-	value.val = func() []reflect.Value { return []reflect.Value{reflect.ValueOf(data)} }
+	value.values = []reflect.Value{reflect.ValueOf(data)}
 	go func() { s.data <- value }()
 }
 
-func (s *promise) Value(fn interface{}) {
+func (s *promise) Value(fn interface{}) (gErr error) {
 	s.waitForClose()
 
 	vfn := xerror_util.FuncValue(fn)
 	for data := range s.data {
 		func() {
-			defer futureValuePut(data.(*futureValue))
-			defer s.wg.Done()
-			defer xerror.RespRaise(func(err xerror.XErr) error {
-				s.Cancel()
-				return xerror.WrapF(err, xerror_util.CallerWithFunc(fn))
-			})
+			defer xerror.Resp(func(err xerror_abc.XErr) { s.Cancel(); gErr = xerror.WrapF(err, xerror_util.CallerWithFunc(fn)) })
+			defer func() { futureValuePut(data.(*futureValue)); s.wg.Done() }()
 			vfn(data.Get()...)
 		}()
 	}
+
+	return
 }
 
 func Map(data interface{}, fn interface{}) interface{} {
+	xerror.Assert(data == nil, "[data] should not be nil")
+	xerror.Assert(fn == nil, "[fn] should not be nil")
+
 	vfn := reflect.ValueOf(fn)
 	vd := reflect.ValueOf(data)
 	l := vd.Len()
-	var values []xprocess_abc.FutureValue
+
+	xerror.Assert(l == 0, "[fn] should not be nil")
+
+	var values = make([]xprocess_abc.FutureValue, 0, l)
 	for i := 0; i < l; i++ {
-		values = append(values, Async(vfn, vd.Index(i)))
+		values = append(values, Async(vfn)(vd.Index(i)))
 	}
 
 	var t reflect.Type
@@ -116,34 +121,29 @@ func Map(data interface{}, fn interface{}) interface{} {
 
 func Promise(fn func(g xprocess_abc.Future)) xprocess_abc.IPromise {
 	s := &promise{data: make(chan xprocess_abc.FutureValue)}
-	s.wg.Inc()
-	go func() {
-		defer s.wg.Done()
-		defer xerror.Resp(func(err xerror.XErr) {
-			s.err.Store(err)
-			s.Cancel()
-		})
-		fn(s)
-	}()
+	s.Go(func() { fn(s) })
 	return s
 }
 
-func Async(fn interface{}, args ...interface{}) xprocess_abc.FutureValue {
-	var err error
-	var value = futureValueGet()
-	var val = make(chan []reflect.Value)
+func Async(fn interface{}) func(args ...interface{}) xprocess_abc.FutureValue {
 	var vfn = xerror_util.FuncRaw(fn)
-	go func() {
-		defer xerror.Resp(func(err1 xerror.XErr) {
-			err = xerror.WrapF(err1, "input:%#v, func:%s, caller:%s", args, reflect.TypeOf(fn), xerror_util.CallerWithFunc(fn))
-			val <- nil
-		})
-		val <- vfn(args...)
-	}()
+	return func(args ...interface{}) xprocess_abc.FutureValue {
+		var err error
+		var value = futureValueGet()
+		var val = make(chan []reflect.Value)
 
-	value.val = func() []reflect.Value { return <-val }
-	value.err = func() error { return err }
-	return value
+		go func() {
+			defer xerror.Resp(func(err1 xerror.XErr) {
+				err = err1.WrapF(err1, "recovery error, input:%#v, func:%s, caller:%s", args, reflect.TypeOf(fn), xerror_util.CallerWithFunc(fn))
+				val <- []reflect.Value{}
+			})
+			val <- vfn(args...)
+		}()
+
+		value.val = func() []reflect.Value { return <-val }
+		value.err = func() error { return err }
+		return value
+	}
 }
 
 func Await(val xprocess_abc.FutureValue, fn interface{}) xprocess_abc.FutureValue {

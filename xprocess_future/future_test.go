@@ -16,7 +16,7 @@ func handleReq(i int) (resp *http.Response, err error) {
 
 func asyncHandleReq(i int) xprocess_abc.FutureValue {
 	fmt.Println("url", i)
-	return Async(http.Get, "https://www.cnblogs.com")
+	return Async(http.Get)("https://www.cnblogs.com")
 }
 
 func getData() xprocess_abc.IPromise {
@@ -27,7 +27,7 @@ func getData() xprocess_abc.IPromise {
 				return
 			}
 
-			val := Async(http.Get, "https://www.cnblogs.com")
+			val := Async(http.Get)("https://www.cnblogs.com")
 			head := Await(val, func(resp *http.Response, err error) http.Header {
 				xerror.Panic(err)
 				resp.Header.Add("test", "11111")
@@ -36,7 +36,7 @@ func getData() xprocess_abc.IPromise {
 
 			y.Yield(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response {
 				resp.Header.Set("dddd", "hhhh")
-				head.Value(func(head http.Header) { resp.Header = head })
+				xerror.Panic(head.Value(func(head http.Header) { resp.Header = head }))
 				return resp
 			})
 
@@ -53,11 +53,11 @@ func getData() xprocess_abc.IPromise {
 func handleData() xprocess_abc.IPromise {
 	return Promise(func(y xprocess_abc.Future) {
 		s := getData()
-		s.Value(func(resp *http.Response) {
+		xerror.Panic(s.Value(func(resp *http.Response) {
 			head := resp.Header
 			head.Add("test1111", "22222")
 			y.Yield(head)
-		})
+		}))
 
 	})
 }
@@ -66,27 +66,25 @@ func TestAsync(t *testing.T) {
 	val1 := asyncHandleReq(1)
 	val2 := asyncHandleReq(2)
 	val3 := asyncHandleReq(3)
-	val4 := Async(func(i int) {
-		panic("sss")
-	}, 1, 2)
+	val4 := Async(func(i int) { panic("sss") })
 
 	head := Await(val1, func(resp *http.Response, err error) http.Header {
 		xerror.Panic(err)
-		val2.Value(func(resp1 *http.Response, err1 error) {
+		xerror.Panic(val2.Value(func(resp1 *http.Response, err1 error) {
 			resp1.Header.Set("test", "11111")
 			resp.Header = resp1.Header
-		})
+		}))
 		return resp.Header
 	})
 
-	fmt.Printf("%s\n, %s\n, %s\n, %s\n, %s\n", val1, val2, val3, val4, head)
+	fmt.Printf("%s\n, %s\n, %s\n, %s\n, %s\n", val1, val2, val3, val4(1), head)
 }
 
 func TestGetData(t *testing.T) {
 	defer xerror.RespExit()
-	getData().Value(func(resp *http.Response) {
+	xerror.Panic(getData().Value(func(resp *http.Response) {
 		fmt.Println(resp)
-	})
+	}))
 }
 
 func handleData2() xprocess_abc.IPromise {
@@ -103,13 +101,13 @@ func handleData2() xprocess_abc.IPromise {
 				xerror.Panic(err)
 				g.Yield(resp)
 
-				asyncHandleReq(1).Value(func(resp *http.Response, _ error) {
+				xerror.Panic(asyncHandleReq(1).Value(func(resp *http.Response, _ error) {
 					g.Yield(resp)
-				})
+				}))
 
-				g.Await(asyncHandleReq(1), func(resp *http.Response, _ error) {
+				xerror.Panic(g.Await(asyncHandleReq(1), func(resp *http.Response, _ error) {
 					g.Yield(resp)
-				})
+				}))
 			})
 		}
 	})
@@ -117,9 +115,9 @@ func handleData2() xprocess_abc.IPromise {
 
 func TestName11w(t *testing.T) {
 	s := handleData2()
-	s.Value(func(i interface{}) {
+	xerror.Panic(s.Value(func(i interface{}) {
 		fmt.Println(i)
-	})
+	}))
 	fmt.Printf("%+v\n", s.Wait())
 }
 

@@ -2,7 +2,6 @@ package xprocess_group
 
 import (
 	"context"
-	"errors"
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xlog"
@@ -39,9 +38,7 @@ func (g *group) Wait() { g.wg.Wait(); g.cancel() }
 // Go
 // 运行一个goroutine
 func (g *group) Go(fn func(ctx context.Context)) {
-	if fn == nil {
-		xerror.Next().Panic(errors.New("[fn] should not be nil"))
-	}
+	xerror.Assert(fn == nil, "[fn] should not be nil")
 
 	g.wg.Inc()
 
