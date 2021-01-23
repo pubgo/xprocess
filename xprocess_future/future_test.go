@@ -2,126 +2,68 @@ package xprocess_future
 
 import (
 	"fmt"
+	"github.com/pubgo/xprocess/xprocess_abc"
 	"net/http"
 	"testing"
 
-	"github.com/pubgo/xerror"
-	"github.com/pubgo/xprocess/xprocess_abc"
+	"github.com/stretchr/testify/assert"
 )
 
-func handleReq(i int) (resp *http.Response, err error) {
-	fmt.Println("url", i)
-	return http.Get("https://www.cnblogs.com")
+func TestAwaitFn(t *testing.T) {
+	val := AwaitFn(http.Get, "https://www.cnblogs.com")
+	assert.Nil(t, val.Err())
+	assert.NotNil(t, val.Get())
+	assert.Nil(t, val.Value(func(resp *http.Response, err error) {
+		assert.Nil(t, err)
+		assert.NotNil(t, resp)
+	}))
+
+	val = AwaitFn(func(i int) {}, 1)
+	assert.Nil(t, val.Err())
+	assert.Nil(t, val.Get())
+	assert.Nil(t, val.Value(func() {}))
 }
 
-func asyncHandleReq(i int) xprocess_abc.FutureValue {
-	fmt.Println("url", i)
-	return Async(http.Get)("https://www.cnblogs.com")
-}
-
-func getData() xprocess_abc.IPromise {
-	return Promise(func(y xprocess_abc.Future) {
-		for i := 10; i > 0; i-- {
-			i := i
-			if i <= 3 {
-				return
-			}
-
-			val := Async(http.Get)("https://www.cnblogs.com")
-			head := Await(val, func(resp *http.Response, err error) http.Header {
-				xerror.Panic(err)
-				resp.Header.Add("test", "11111")
-				return resp.Header
-			})
-
-			y.Yield(asyncHandleReq(1), func(resp *http.Response, err error) *http.Response {
-				resp.Header.Set("dddd", "hhhh")
-				xerror.Panic(head.Value(func(head http.Header) { resp.Header = head }))
-				return resp
-			})
-
-			y.Yield(func() {
-				resp, err := http.Get("https://www.cnblogs.com")
-				xerror.Panic(err)
-				resp.Header.Add("testsssss", "11111")
-				y.Yield(resp)
-			})
-		}
-	})
-}
-
-func handleData() xprocess_abc.IPromise {
-	return Promise(func(y xprocess_abc.Future) {
-		s := getData()
-		xerror.Panic(s.Value(func(resp *http.Response) {
-			head := resp.Header
-			head.Add("test1111", "22222")
-			y.Yield(head)
-		}))
-
-	})
-}
-
-func TestAsync(t *testing.T) {
-	val1 := asyncHandleReq(1)
-	val2 := asyncHandleReq(2)
-	val3 := asyncHandleReq(3)
-	val4 := Async(func(i int) { panic("sss") })
-
-	head := Await(val1, func(resp *http.Response, err error) http.Header {
-		xerror.Panic(err)
-		xerror.Panic(val2.Value(func(resp1 *http.Response, err1 error) {
-			resp1.Header.Set("test", "11111")
-			resp.Header = resp1.Header
-		}))
+func TestAwait(t *testing.T) {
+	val := AwaitFn(http.Get, "https://www.cnblogs.com")
+	head := Await(val, func(resp *http.Response, err error) http.Header {
+		assert.Nil(t, err)
+		resp.Header.Add("aa", "11")
 		return resp.Header
 	})
-
-	fmt.Printf("%s\n, %s\n, %s\n, %s\n, %s\n", val1, val2, val3, val4(1), head)
+	assert.Nil(t, head.Err())
+	assert.NotNil(t, head.Get())
+	assert.Equal(t, head.Get().(http.Header).Get("aa"), "11")
 }
 
-func TestGetData(t *testing.T) {
-	defer xerror.RespExit()
-	xerror.Panic(getData().Value(func(resp *http.Response) {
-		fmt.Println(resp)
-	}))
-}
-
-func handleData2() xprocess_abc.IPromise {
+func promise1() xprocess_abc.IPromise {
 	return Promise(func(g xprocess_abc.Future) {
-		for i := 10; i > 0; i-- {
-			i := i
-			g.Yield(i)
-			g.Yield(func() {
-				if i == 5 {
-					xerror.Panic(xerror.New("error test"))
-				}
+		for i := 0; i < 10; i++ {
+			val := AwaitFn(http.Get, "https://www.cnblogs.com")
+			g.Yield(val)
 
-				resp, err := http.Get("https://www.cnblogs.com")
-				xerror.Panic(err)
-				g.Yield(resp)
-
-				xerror.Panic(asyncHandleReq(1).Value(func(resp *http.Response, _ error) {
-					g.Yield(resp)
-				}))
-
-				xerror.Panic(g.Await(asyncHandleReq(1), func(resp *http.Response, _ error) {
-					g.Yield(resp)
-				}))
+			val = AwaitFn(http.Get, "https://www.cnblogs.com")
+			val = Await(val, func(resp *http.Response, err error) (*http.Response, error) {
+				resp.Header.Set("a", "b")
+				return resp, err
+			})
+			g.YieldFn(val, func(resp *http.Response, err error) (*http.Response, error) {
+				resp.Header.Set("b", "c")
+				return resp, err
 			})
 		}
 	})
 }
 
-func TestName11w(t *testing.T) {
-	s := handleData2()
-	xerror.Panic(s.Value(func(i interface{}) {
-		fmt.Println(i)
-	}))
-	fmt.Printf("%+v\n", s.Wait())
-}
+func TestPromise(t *testing.T) {
+	p := promise1()
+	assert.Nil(t, p.RunUntilComplete())
 
-func TestMap(t *testing.T) {
-	dt := Map([]string{"111", "222"}, func(s string) string { return s + "mmm" })
-	fmt.Println(dt.([]string)[0])
+	p = promise1()
+	heads := p.Map(func(resp *http.Response, err error) http.Header { return resp.Header })
+	for _,h := range heads.([]http.Header) {
+		fmt.Println(h)
+	}
+
+	p.Cancelled()
 }

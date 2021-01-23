@@ -165,7 +165,7 @@ func (t *process) goWithDelay(dur time.Duration, fn func()) (gErr error) {
 	go func() {
 		defer xerror.Resp(func(err xerror.XErr) {
 			dur = 0
-			gErr = err.WrapF(err, "process.goWithDelay error")
+			gErr = err.WrapF("process.goWithDelay error")
 		})
 
 		fn()

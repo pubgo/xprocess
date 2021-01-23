@@ -31,18 +31,17 @@ func (t *test) In(args ...interface{}) {
 }
 
 func (t *test) Do() {
-	defer xerror.RespExit()
-
 	vfn := xerror_util.Func(t.fn)
 	for i := range t.params {
 		vfn(t.params[i]...)
 	}
-
 	return
 }
 
 func TestFuncWith(fn interface{}) *test {
 	xerror.Assert(fn == nil, "[fn] should not be nil")
-	xerror.Assert(reflect.TypeOf(fn).Kind() != reflect.Func, "kind: %s, name: %s", reflect.TypeOf(fn).Kind(), reflect.TypeOf(fn))
+	xerror.AssertFn(reflect.TypeOf(fn).Kind() != reflect.Func, func() error {
+		return xerror.Fmt("kind: %s, name: %s", reflect.TypeOf(fn).Kind(), reflect.TypeOf(fn))
+	})
 	return &test{fn: fn}
 }

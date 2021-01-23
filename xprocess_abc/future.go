@@ -3,20 +3,22 @@ package xprocess_abc
 import "reflect"
 
 type IPromise interface {
-	Wait() error
+	RunUntilComplete() error
+	Await() chan FutureValue
 	Cancelled() bool
-	Value(fn interface{}) error // block
+	Map(fn interface{}) interface{}
 }
 
 type Future interface {
 	Cancel()
-	Yield(data interface{}, fn ...interface{})   // async
-	Await(val FutureValue, fn interface{}) error // block
+	Yield(data interface{})                  // async
+	YieldFn(val FutureValue, fn interface{}) // block
 }
 
 type FutureValue interface {
 	Err() error
 	String() string
-	Get() []reflect.Value
+	Get() interface{}
+	Raw() []reflect.Value
 	Value(fn interface{}) error
 }

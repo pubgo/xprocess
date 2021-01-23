@@ -15,55 +15,44 @@ var _ xprocess_abc.FutureValue = (*futureValue)(nil)
 type futureValue struct {
 	done   sync.Once
 	values []reflect.Value
-	err    func() error
-	val    func() []reflect.Value
+	err    error
+	val    chan []reflect.Value
 }
 
-func (v *futureValue) String() string {
-	xerror.Next().Panic(v.Err())
-	return valueStr(v.getVal()...)
-}
+func (v *futureValue) setErr(err error) *futureValue { v.err = err; v.val <- nil; return v }
+func (v *futureValue) Raw() []reflect.Value          { return v.getVal() }
+func (v *futureValue) String() string                { return valueStr(v.getVal()...) }
 
-func (v *futureValue) Get() []reflect.Value { return v.getVal() }
-func (v *futureValue) Err() error {
-	_ = v.getVal()
-	if v.err == nil {
+func (v *futureValue) Get() interface{} {
+	val := v.getVal()
+	if len(val) == 0 || !val[0].IsValid() || val[0].IsNil() {
 		return nil
 	}
 
-	return v.err()
+	return val[0].Interface()
+}
+
+func (v *futureValue) Err() error {
+	_ = v.getVal()
+	return v.err
 }
 
 func (v *futureValue) getVal() []reflect.Value {
-	v.done.Do(func() {
-		if v.val == nil {
-			return
-		}
-
-		v.values = v.val()
-		v.val = nil
-	})
-
+	v.done.Do(func() { v.values = <-v.val })
 	return v.values
 }
 
 func (v *futureValue) Value(fn interface{}) (gErr error) {
 	defer xerror.Resp(func(err xerror_abc.XErr) {
-		gErr = xerror.WrapF(err, "input:%s, func:%s", valueStr(v.getVal()...), reflect.TypeOf(fn))
+		gErr = err.WrapF("input:%s, func:%s", valueStr(v.getVal()...), reflect.TypeOf(fn))
 	})
 
-	val := v.getVal()
-	xerror.Next().Panic(v.Err())
+	xerror.Assert(fn == nil, "[fn] should not be nil")
+	xerror.Panic(v.Err())
 
-	xerror_util.FuncValue(fn)(val...)
+	xerror_util.FuncValue(fn)(v.getVal()...)
 	return
 }
 
-var _futureValue = sync.Pool{New: func() interface{} { return &futureValue{} }}
-
-func futureValueGet() *futureValue { return _futureValue.Get().(*futureValue) }
-func futureValuePut(val *futureValue) {
-	val.values = val.values[:0]
-	val.done = sync.Once{}
-	_futureValue.Put(val)
-}
+func futureValueGet() *futureValue    { return &futureValue{val: make(chan []reflect.Value)} }
+func futureValuePut(val *futureValue) { _ = val }
