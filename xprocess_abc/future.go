@@ -6,7 +6,7 @@ type IPromise interface {
 	RunUntilComplete() error
 	Await() chan FutureValue
 	Cancelled() bool
-	Map(fn interface{}) interface{}
+	Map(fn interface{}) Value
 }
 
 type Future interface {
@@ -21,4 +21,10 @@ type FutureValue interface {
 	Get() interface{}
 	Raw() []reflect.Value
 	Value(fn interface{}) error
+}
+
+type Value interface {
+	Err() error
+	String() string
+	Value() interface{}
 }

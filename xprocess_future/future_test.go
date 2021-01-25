@@ -2,10 +2,10 @@ package xprocess_future
 
 import (
 	"fmt"
-	"github.com/pubgo/xprocess/xprocess_abc"
 	"net/http"
 	"testing"
 
+	"github.com/pubgo/xprocess/xprocess_abc"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -47,6 +47,7 @@ func promise1() xprocess_abc.IPromise {
 				resp.Header.Set("a", "b")
 				return resp, err
 			})
+
 			g.YieldFn(val, func(resp *http.Response, err error) (*http.Response, error) {
 				resp.Header.Set("b", "c")
 				return resp, err
@@ -61,7 +62,9 @@ func TestPromise(t *testing.T) {
 
 	p = promise1()
 	heads := p.Map(func(resp *http.Response, err error) http.Header { return resp.Header })
-	for _,h := range heads.([]http.Header) {
+	assert.Nil(t, heads.Err())
+
+	for _, h := range heads.Value().([]http.Header) {
 		fmt.Println(h)
 	}
 

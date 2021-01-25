@@ -56,3 +56,14 @@ func (v *futureValue) Value(fn interface{}) (gErr error) {
 
 func futureValueGet() *futureValue    { return &futureValue{val: make(chan []reflect.Value)} }
 func futureValuePut(val *futureValue) { _ = val }
+
+var _ xprocess_abc.Value = (*value)(nil)
+
+type value struct {
+	err error
+	val interface{}
+}
+
+func (v *value) Err() error         { return v.err }
+func (v *value) String() string     { return "" }
+func (v *value) Value() interface{} { return v.val }

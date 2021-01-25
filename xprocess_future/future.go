@@ -99,12 +99,12 @@ func (s *promise) RunUntilComplete() error {
 	return xerror.Combine(errs...)
 }
 
-func (s *promise) Map(fn interface{}) interface{} {
+func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
 	s.waitForClose()
 
-	xerror.Assert(fn == nil, "[fn] should not be nil")
+	defer xerror.Resp(func(err xerror.XErr) { val1 = &value{err: err} })
 
-	defer xerror.RespExit()
+	xerror.Assert(fn == nil, "[fn] should not be nil")
 
 	var errs []error
 	var values []xprocess_abc.FutureValue
@@ -119,14 +119,14 @@ func (s *promise) Map(fn interface{}) interface{} {
 	xerror.Panic(xerror.Combine(errs...), "values errors")
 
 	if len(values) == 0 {
-		return nil
+		return
 	}
 
 	var tfn = reflect.TypeOf(fn)
 
 	// fn没有输出
 	if tfn.NumOut() == 0 {
-		return s.RunUntilComplete()
+		xerror.Panic(s.RunUntilComplete())
 	}
 
 	var t = tfn.Out(0)
@@ -147,7 +147,7 @@ func (s *promise) Map(fn interface{}) interface{} {
 	}
 	xerror.Panic(xerror.Combine(errs...), "out values errors")
 
-	return rst.Interface()
+	return &value{val: rst.Interface()}
 }
 
 func (s *promise) Go(fn func()) {
@@ -155,7 +155,6 @@ func (s *promise) Go(fn func()) {
 	go func() {
 		defer s.wg.Done()
 		defer xerror.Resp(func(err xerror.XErr) { s.cancel(); s.err.Store(err) })
-
 		fn()
 	}()
 }
