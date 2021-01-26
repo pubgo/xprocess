@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAwaitFn(t *testing.T) {
-	val := AwaitFn(http.Get, "https://www.cnblogs.com")
+func TestAsync(t *testing.T) {
+	val := Async(http.Get, "https://www.cnblogs.com")
 	assert.Nil(t, val.Err())
 	assert.NotNil(t, val.Get())
 	assert.Nil(t, val.Value(func(resp *http.Response, err error) {
@@ -18,14 +18,14 @@ func TestAwaitFn(t *testing.T) {
 		assert.NotNil(t, resp)
 	}))
 
-	val = AwaitFn(func(i int) {}, 1)
+	val = Async(func(i int) {}, 1)
 	assert.Nil(t, val.Err())
 	assert.Nil(t, val.Get())
 	assert.Nil(t, val.Value(func() {}))
 }
 
 func TestAwait(t *testing.T) {
-	val := AwaitFn(http.Get, "https://www.cnblogs.com")
+	val := Async(http.Get, "https://www.cnblogs.com")
 	head := Await(val, func(resp *http.Response, err error) http.Header {
 		assert.Nil(t, err)
 		resp.Header.Add("aa", "11")
@@ -39,10 +39,10 @@ func TestAwait(t *testing.T) {
 func promise1() xprocess_abc.IPromise {
 	return Promise(func(g xprocess_abc.Future) {
 		for i := 0; i < 10; i++ {
-			val := AwaitFn(http.Get, "https://www.cnblogs.com")
+			val := Async(http.Get, "https://www.cnblogs.com")
 			g.Yield(val)
 
-			val = AwaitFn(http.Get, "https://www.cnblogs.com")
+			val = Async(http.Get, "https://www.cnblogs.com")
 			val = Await(val, func(resp *http.Response, err error) (*http.Response, error) {
 				resp.Header.Set("a", "b")
 				return resp, err

@@ -165,7 +165,7 @@ func Promise(fn func(g xprocess_abc.Future)) xprocess_abc.IPromise {
 	return s
 }
 
-func AwaitFn(fn interface{}, args ...interface{}) (val1 xprocess_abc.FutureValue) {
+func Async(fn interface{}, args ...interface{}) (val1 xprocess_abc.FutureValue) {
 	var value = futureValueGet()
 
 	defer xerror.Resp(func(err xerror.XErr) {

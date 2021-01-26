@@ -5,8 +5,12 @@ import (
 	"github.com/pubgo/xprocess/xprocess_future"
 )
 
-func AwaitFn(fn interface{}, args ...interface{}) xprocess_abc.FutureValue {
-	return xprocess_future.AwaitFn(fn, args...)
+type FutureValue = xprocess_abc.FutureValue
+type IPromise = xprocess_abc.IPromise
+type Value = xprocess_abc.Value
+
+func Async(fn interface{}, args ...interface{}) xprocess_abc.FutureValue {
+	return xprocess_future.Async(fn, args...)
 }
 
 func Await(val xprocess_abc.FutureValue, fn interface{}) xprocess_abc.FutureValue {
