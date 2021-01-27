@@ -85,8 +85,10 @@ func (s *promise) await(val xprocess_abc.FutureValue, fn interface{}) {
 	s.yield(Await(val, fn))
 }
 
-func (s *promise) RunUntilComplete() error {
+func (s *promise) RunUntilComplete() (err error) {
 	s.waitForClose()
+
+	defer xerror.RespErr(&err)
 
 	var errs []error
 	for data := range s.Await() {
@@ -96,7 +98,8 @@ func (s *promise) RunUntilComplete() error {
 		futureValuePut(data.(*futureValue))
 	}
 
-	return xerror.Combine(errs...)
+	xerror.PanicCombine(errs...)
+	return nil
 }
 
 func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
@@ -116,7 +119,7 @@ func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
 		values = append(values, Await(data, fn))
 	}
 
-	xerror.Panic(xerror.Combine(errs...), "values errors")
+	xerror.PanicCombine(errs...)
 
 	if len(values) == 0 {
 		return
@@ -145,7 +148,7 @@ func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
 
 		futureValuePut(values[i].(*futureValue))
 	}
-	xerror.Panic(xerror.Combine(errs...), "out values errors")
+	xerror.PanicCombine(errs...)
 
 	return &value{val: rst.Interface()}
 }

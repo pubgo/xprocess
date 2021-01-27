@@ -2,12 +2,29 @@ package xprocess_future
 
 import (
 	"fmt"
+	"github.com/pubgo/xerror"
 	"net/http"
 	"testing"
 
 	"github.com/pubgo/xprocess/xprocess_abc"
 	"github.com/stretchr/testify/assert"
 )
+
+type a1 struct {
+	a int
+}
+
+func a1Test() *a1 {
+	return &a1{}
+}
+
+func a2Test() *a1 {
+	return nil
+}
+
+func a3Test() a1 {
+	return a1{}
+}
 
 func TestAsync(t *testing.T) {
 	val := Async(http.Get, "https://www.cnblogs.com")
@@ -22,6 +39,19 @@ func TestAsync(t *testing.T) {
 	assert.Nil(t, val.Err())
 	assert.Nil(t, val.Get())
 	assert.Nil(t, val.Value(func() {}))
+
+	a1Val := Await(Async(a1Test), func(a *a1) *a1 { a.a = 1; return a })
+	assert.Nil(t, a1Val.Err())
+	assert.NotNil(t, a1Val.Get().(*a1))
+	assert.Equal(t, a1Val.Get().(*a1).a, 1)
+
+	a2Val := Await(Async(a2Test), func(a *a1) *a1 { a.a = 1; return a })
+	assert.Nil(t, a2Val.Err())
+	xerror.Parse(a2Val.Err()).Print()
+	fmt.Println(a2Val.Err())
+	assert.Equal(t, a2Val.Get().(*a1), nil)
+	assert.Equal(t, a2Val.Get().(*a1).a, 1)
+
 }
 
 func TestAwait(t *testing.T) {
