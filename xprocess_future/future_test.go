@@ -2,7 +2,6 @@ package xprocess_future
 
 import (
 	"fmt"
-	"github.com/pubgo/xerror"
 	"net/http"
 	"testing"
 
@@ -45,13 +44,23 @@ func TestAsync(t *testing.T) {
 	assert.NotNil(t, a1Val.Get().(*a1))
 	assert.Equal(t, a1Val.Get().(*a1).a, 1)
 
-	a2Val := Await(Async(a2Test), func(a *a1) *a1 { a.a = 1; return a })
-	assert.Nil(t, a2Val.Err())
-	xerror.Parse(a2Val.Err()).Print()
-	fmt.Println(a2Val.Err())
-	assert.Equal(t, a2Val.Get().(*a1), nil)
-	assert.Equal(t, a2Val.Get().(*a1).a, 1)
+	a2Val := Await(Async(a2Test), func(a *a1) *a1 {
+		if a == nil {
+			return nil
+		}
 
+		a.a = 1
+		return a
+	})
+	assert.Nil(t, a2Val.Err())
+	assert.Nil(t, a2Val.Get())
+
+	a3Val := Await(Async(a3Test), func(a a1) a1 {
+		a.a = 1
+		return a
+	})
+	assert.Nil(t, a3Val.Err())
+	assert.Equal(t, a3Val.Get().(a1).a, 1)
 }
 
 func TestAwait(t *testing.T) {

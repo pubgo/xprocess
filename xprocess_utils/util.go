@@ -67,8 +67,13 @@ func FuncValue(fn interface{}) func(...reflect.Value) []reflect.Value {
 	var tfn = vfn.Type()
 	var numIn = tfn.NumIn()
 	var variadicType reflect.Type
+	var variadicValue reflect.Value
 	if tfn.IsVariadic() {
 		variadicType = tfn.In(numIn - 1)
+		variadicValue = reflect.Zero(variadicType)
+		if isElem(variadicType.Kind()) {
+			variadicValue = reflect.New(variadicType).Elem()
+		}
 	}
 
 	return func(args ...reflect.Value) []reflect.Value {
@@ -76,14 +81,21 @@ func FuncValue(fn interface{}) func(...reflect.Value) []reflect.Value {
 			"the input params of func is not match, func: %s, numIn:%d numArgs:%d\n", tfn, numIn, len(args))
 
 		for i := range args {
-			if i >= numIn {
-				xerror.Assert(variadicType == nil, "[variadicType] should not be nil, args:%s, fn:%s", valueStr(args...), tfn)
-
-				args[i] = reflect.Zero(variadicType)
+			// variadic
+			if i >= numIn && !args[i].IsValid() {
+				args[i] = variadicValue
 				continue
 			}
 
 			if !args[i].IsValid() {
+				args[i] = reflect.Zero(tfn.In(i))
+				if isElem(args[i].Kind()) && args[i].IsNil() {
+					args[i] = reflect.New(tfn.In(i).Elem())
+				}
+				continue
+			}
+
+			if isElem(args[i].Kind()) && args[i].IsNil() {
 				args[i] = reflect.Zero(tfn.In(i))
 			}
 		}
@@ -100,7 +112,7 @@ func FuncValue(fn interface{}) func(...reflect.Value) []reflect.Value {
 func FuncRaw(fn interface{}) func(...interface{}) []reflect.Value {
 	vfn := FuncValue(fn)
 	return func(args ...interface{}) []reflect.Value {
-		var _args = valueGet()
+		var args1 = valueGet()
 		for i := range args {
 			var vk reflect.Value
 			if args[i] == nil {
@@ -110,9 +122,9 @@ func FuncRaw(fn interface{}) func(...interface{}) []reflect.Value {
 			} else {
 				vk = reflect.ValueOf(args[i])
 			}
-			_args = append(_args, vk)
+			args1 = append(args1, vk)
 		}
-		return vfn(_args...)
+		return vfn(args1...)
 	}
 }
 
@@ -153,19 +165,10 @@ func Func(fn interface{}) func(...interface{}) func(...interface{}) {
 	}
 }
 
-var valuePool = sync.Pool{
-	New: func() interface{} {
-		return make([]reflect.Value, 0, 1)
-	},
-}
+var valuePool = sync.Pool{New: func() interface{} { return make([]reflect.Value, 0, 1) }}
 
-func valueGet() []reflect.Value {
-	return valuePool.Get().([]reflect.Value)
-}
-
-func valuePut(v []reflect.Value) {
-	valuePool.Put(v[:0])
-}
+func valueGet() []reflect.Value  { return valuePool.Get().([]reflect.Value) }
+func valuePut(v []reflect.Value) { valuePool.Put(v[:0]) }
 
 func valueStr(values ...reflect.Value) string {
 	var data []interface{}
@@ -177,4 +180,12 @@ func valueStr(values ...reflect.Value) string {
 		data = append(data, val)
 	}
 	return fmt.Sprint(data...)
+}
+
+func isElem(val reflect.Kind) bool {
+	switch val {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Interface, reflect.Slice:
+		return true
+	}
+	return false
 }

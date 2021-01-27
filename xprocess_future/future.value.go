@@ -25,7 +25,7 @@ func (v *futureValue) String() string                { return valueStr(v.getVal(
 
 func (v *futureValue) Get() interface{} {
 	val := v.getVal()
-	if len(val) == 0 || !val[0].IsValid() || val[0].IsNil() {
+	if len(val) == 0 || !val[0].IsValid() {
 		return nil
 	}
 
