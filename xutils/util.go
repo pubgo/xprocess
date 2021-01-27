@@ -1,4 +1,4 @@
-package xprocess_utils
+package xutils
 
 import (
 	"fmt"

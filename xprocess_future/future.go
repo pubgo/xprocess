@@ -7,7 +7,7 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xprocess/xprocess_abc"
-	"github.com/pubgo/xprocess/xprocess_utils"
+	"github.com/pubgo/xprocess/xutils"
 	"github.com/pubgo/xprocess/xprocess_waitgroup"
 	"go.uber.org/atomic"
 )
@@ -175,12 +175,12 @@ func Async(fn interface{}, args ...interface{}) (val1 xprocess_abc.FutureValue) 
 
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
-	var vfn = xprocess_utils.FuncRaw(fn)
+	var vfn = xutils.FuncRaw(fn)
 
 	go func() {
 		defer xerror.Resp(func(err1 xerror.XErr) {
 			val1 = value.setErr(err1.WrapF("recovery error, input:%#v, func:%s, caller:%s",
-				args, reflect.TypeOf(fn), xprocess_utils.FuncStack(fn)))
+				args, reflect.TypeOf(fn), xutils.FuncStack(fn)))
 		})
 
 		value.val <- vfn(args...)
@@ -197,7 +197,7 @@ func Await(val xprocess_abc.FutureValue, fn interface{}) (val1 xprocess_abc.Futu
 	xerror.Assert(val == nil, "[val] should not be nil")
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
-	var vfn = xprocess_utils.FuncValue(fn)
+	var vfn = xutils.FuncValue(fn)
 	go func() {
 		if err := val.Err(); err != nil {
 			value.setErr(err)
