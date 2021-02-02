@@ -26,7 +26,7 @@ func TestWaitGroup(t *testing.T) {
 
 func TestWaitGroupWithCheck(t *testing.T) {
 	// enable checked
-	var wg = WaitGroup{Check: 1}
+	var wg = WaitGroup{Check: true}
 
 	for i := 100; i > 0; i-- {
 		wg.Inc()

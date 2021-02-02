@@ -9,6 +9,7 @@ import (
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xlog"
 	"github.com/pubgo/xprocess/xprocess_errs"
+	"go.uber.org/zap"
 )
 
 func Break() { panic(xprocess_errs.ErrBreak) }
@@ -96,7 +97,7 @@ func (t *process) goCtx(fn func(ctx context.Context)) context.CancelFunc {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer cancel()
-		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("process.goCtx error", xlog.Any("err", err)) })
+		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("process.goCtx error", zap.Any("err", err)) })
 
 		fn(ctx)
 	}()
@@ -115,7 +116,7 @@ func (t *process) goLoopCtx(fn func(ctx context.Context)) context.CancelFunc {
 				return
 			}
 
-			xlog.Error("process.goLoopCtx error", xlog.Any("err", err))
+			xlog.Error("process.goLoopCtx error", zap.Any("err", err))
 		})
 
 		for {

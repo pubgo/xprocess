@@ -1,4 +1,4 @@
-package xutils
+package xutil
 
 // ToLowerBytes is the equivalent of bytes.ToLower
 func ToLowerBytes(b []byte) []byte {
@@ -17,33 +17,33 @@ func ToUpperBytes(b []byte) []byte {
 }
 
 // TrimRightBytes is the equivalent of bytes.TrimRight
-func TrimRightBytes(b []byte, cutset byte) []byte {
+func TrimRightBytes(b []byte, c byte) []byte {
 	lenStr := len(b)
-	for lenStr > 0 && b[lenStr-1] == cutset {
+	for lenStr > 0 && b[lenStr-1] == c {
 		lenStr--
 	}
 	return b[:lenStr]
 }
 
 // TrimLeftBytes is the equivalent of bytes.TrimLeft
-func TrimLeftBytes(b []byte, cutset byte) []byte {
+func TrimLeftBytes(b []byte, c byte) []byte {
 	lenStr, start := len(b), 0
-	for start < lenStr && b[start] == cutset {
+	for start < lenStr && b[start] == c {
 		start++
 	}
 	return b[start:]
 }
 
 // TrimBytes is the equivalent of bytes.Trim
-func TrimBytes(b []byte, cutset byte) []byte {
+func TrimBytes(b []byte, c byte) []byte {
 	i, j := 0, len(b)-1
 	for ; i < j; i++ {
-		if b[i] != cutset {
+		if b[i] != c {
 			break
 		}
 	}
 	for ; i < j; j-- {
-		if b[j] != cutset {
+		if b[j] != c {
 			break
 		}
 	}

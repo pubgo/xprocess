@@ -97,7 +97,7 @@ func promise1() xprocess_abc.IPromise {
 
 func TestPromise(t *testing.T) {
 	p := promise1()
-	assert.Nil(t, p.RunUntilComplete())
+	assert.Nil(t, p.RunComplete())
 
 	p = promise1()
 	heads := p.Map(func(resp *http.Response, err error) http.Header { return resp.Header })
@@ -106,6 +106,4 @@ func TestPromise(t *testing.T) {
 	for _, h := range heads.Value().([]http.Header) {
 		fmt.Println(h)
 	}
-
-	p.Cancelled()
 }

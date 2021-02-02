@@ -1,4 +1,4 @@
-package xutils
+package xutil
 
 const MIMEOctetStream = "application/octet-stream"
 

@@ -1,10 +1,11 @@
 package xprocess_test
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/pubgo/xerror"
-	"github.com/pubgo/xerror/xerror_util"
+	"github.com/pubgo/xprocess/xutil"
 )
 
 type Test = test
@@ -31,7 +32,7 @@ func (t *test) In(args ...interface{}) {
 }
 
 func (t *test) Do() {
-	vfn := xerror_util.Func(t.fn)
+	vfn := xutil.Func(t.fn)
 	for i := range t.params {
 		vfn(t.params[i]...)
 	}
@@ -40,8 +41,8 @@ func (t *test) Do() {
 
 func TestFuncWith(fn interface{}) *test {
 	xerror.Assert(fn == nil, "[fn] should not be nil")
-	xerror.AssertFn(reflect.TypeOf(fn).Kind() != reflect.Func, func() error {
-		return xerror.Fmt("kind: %s, name: %s", reflect.TypeOf(fn).Kind(), reflect.TypeOf(fn))
+	xerror.AssertFn(reflect.TypeOf(fn).Kind() != reflect.Func, func() string {
+		return fmt.Sprintf("kind: %s, name: %s", reflect.TypeOf(fn).Kind(), reflect.TypeOf(fn))
 	})
 	return &test{fn: fn}
 }

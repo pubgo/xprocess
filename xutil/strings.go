@@ -1,4 +1,4 @@
-package xutils
+package xutil
 
 // ToLower is the equivalent of strings.ToLower
 func ToLower(b string) string {

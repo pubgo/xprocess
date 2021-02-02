@@ -6,11 +6,13 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xerror/xerror_abc"
-	"github.com/pubgo/xerror/xerror_util"
 	"github.com/pubgo/xprocess/xprocess_abc"
+	"github.com/pubgo/xprocess/xutil"
 )
 
 var _ xprocess_abc.FutureValue = (*futureValue)(nil)
+
+func newFutureValue() *futureValue { return &futureValue{} }
 
 type futureValue struct {
 	done   sync.Once
@@ -19,6 +21,7 @@ type futureValue struct {
 	valFn  func() []reflect.Value
 }
 
+func (v *futureValue) Err() error                    { _ = v.getVal(); return v.err }
 func (v *futureValue) setErr(err error) *futureValue { v.err = err; return v }
 func (v *futureValue) Raw() []reflect.Value          { return v.getVal() }
 func (v *futureValue) String() string                { return valueStr(v.getVal()...) }
@@ -30,11 +33,6 @@ func (v *futureValue) Get() interface{} {
 	}
 
 	return val[0].Interface()
-}
-
-func (v *futureValue) Err() error {
-	_ = v.getVal()
-	return v.err
 }
 
 func (v *futureValue) getVal() []reflect.Value {
@@ -54,12 +52,9 @@ func (v *futureValue) Value(fn interface{}) (gErr error) {
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 	xerror.Panic(v.Err())
 
-	xerror_util.FuncValue(fn)(v.getVal()...)
+	xutil.FuncValue(fn)(v.getVal()...)
 	return
 }
-
-func futureValueGet() *futureValue    { return &futureValue{} }
-func futureValuePut(val *futureValue) { _ = val }
 
 var _ xprocess_abc.Value = (*value)(nil)
 

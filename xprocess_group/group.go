@@ -6,6 +6,7 @@ import (
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xlog"
 	"github.com/pubgo/xprocess/xprocess_waitgroup"
+	"go.uber.org/zap"
 )
 
 type Group = group
@@ -18,8 +19,8 @@ type group struct {
 // New
 // 创建一个group对象, 可以带上默认的Context
 func New(c ...uint16) *group {
-	_ctx, cancel := context.WithCancel(context.Background())
-	g := &group{ctx: _ctx, cancel: cancel, wg: xprocess_waitgroup.New(1, c...)}
+	ctx, cancel := context.WithCancel(context.Background())
+	g := &group{ctx: ctx, cancel: cancel, wg: xprocess_waitgroup.New(true, c...)}
 	return g
 }
 
@@ -41,10 +42,9 @@ func (g *group) Go(fn func(ctx context.Context)) {
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
 	g.wg.Inc()
-
 	go func() {
 		defer g.wg.Done()
-		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("group.Go error", xlog.Any("err", err)) })
+		defer xerror.Resp(func(err xerror.XErr) { xlog.Error("group.Go error", zap.Any("err", err)) })
 		fn(g.ctx)
 	}()
 }

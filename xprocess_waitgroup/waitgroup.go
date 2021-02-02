@@ -10,7 +10,7 @@ import (
 //go:linkname state sync.(*WaitGroup).state
 func state(*sync.WaitGroup) (*uint64, *uint32)
 
-func New(check uint8, c ...uint16) WaitGroup {
+func New(check bool, c ...uint16) WaitGroup {
 	cc := uint16(runtime.NumCPU() * 2)
 	if len(c) > 0 {
 		cc = c[0]
@@ -21,7 +21,7 @@ func New(check uint8, c ...uint16) WaitGroup {
 
 type WaitGroup struct {
 	_          int8
-	Check      uint8
+	Check      bool
 	Concurrent uint16
 	wg         sync.WaitGroup
 }
@@ -32,7 +32,7 @@ func (t *WaitGroup) Count() uint16 {
 }
 
 func (t *WaitGroup) check() {
-	if t.Check == 0 {
+	if !t.Check {
 		return
 	}
 
@@ -45,7 +45,7 @@ func (t *WaitGroup) check() {
 	}
 }
 
-func (t *WaitGroup) EnableCheck()  { t.Check = 1 }
+func (t *WaitGroup) EnableCheck()  { t.Check = true }
 func (t *WaitGroup) Inc()          { t.check(); t.wg.Add(1) }
 func (t *WaitGroup) Dec()          { t.wg.Done() }
 func (t *WaitGroup) Done()         { t.wg.Done() }
