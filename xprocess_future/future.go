@@ -7,8 +7,8 @@ import (
 
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xprocess/xprocess_abc"
-	"github.com/pubgo/xprocess/xutils"
 	"github.com/pubgo/xprocess/xprocess_waitgroup"
+	"github.com/pubgo/xprocess/xutils"
 	"go.uber.org/atomic"
 )
 
@@ -53,9 +53,7 @@ func (s *promise) yield(data interface{}) {
 
 	if data == nil {
 		s.wg.Inc()
-		val := futureValueGet()
-		val.val <- nil
-		go func() { s.data <- val }()
+		go func() { s.data <- futureValueGet() }()
 		return
 	}
 
@@ -72,7 +70,7 @@ func (s *promise) yield(data interface{}) {
 
 	s.wg.Inc()
 	value := futureValueGet()
-	value.val <- []reflect.Value{reflect.ValueOf(data)}
+	value.values = []reflect.Value{reflect.ValueOf(data)}
 	go func() { s.data <- value }()
 
 }
@@ -176,14 +174,17 @@ func Async(fn interface{}, args ...interface{}) (val1 xprocess_abc.FutureValue) 
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
 	var vfn = xutils.FuncRaw(fn)
-
+	var data = make(chan []reflect.Value)
+	value.valFn = func() []reflect.Value { return <-data }
 	go func() {
 		defer xerror.Resp(func(err1 xerror.XErr) {
-			val1 = value.setErr(err1.WrapF("recovery error, input:%#v, func:%s, caller:%s",
+			value.setErr(err1.WrapF("recovery error, input:%#v, func:%s, caller:%s",
 				args, reflect.TypeOf(fn), xutils.FuncStack(fn)))
+
+			data <- nil
 		})
 
-		value.val <- vfn(args...)
+		data <- vfn(args...)
 	}()
 
 	return value
@@ -194,21 +195,26 @@ func Await(val xprocess_abc.FutureValue, fn interface{}) (val1 xprocess_abc.Futu
 
 	defer xerror.Resp(func(err xerror.XErr) { val1 = value.setErr(err) })
 
-	xerror.Assert(val == nil, "[val] should not be nil")
+	xerror.Assert(val == nil, "[valFn] should not be nil")
 	xerror.Assert(fn == nil, "[fn] should not be nil")
+
+	var data = make(chan []reflect.Value)
+	value.valFn = func() []reflect.Value { return <-data }
 
 	var vfn = xutils.FuncValue(fn)
 	go func() {
 		if err := val.Err(); err != nil {
 			value.setErr(err)
+			data <- nil
 			return
 		}
 
 		defer xerror.Resp(func(err1 xerror.XErr) {
 			value.setErr(err1.WrapF("input:%s, func:%s", val.Raw(), reflect.TypeOf(fn)))
+			data <- nil
 		})
 
-		value.val <- vfn(val.Raw()...)
+		data <- vfn(val.Raw()...)
 	}()
 
 	return value

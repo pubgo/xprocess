@@ -16,10 +16,10 @@ type futureValue struct {
 	done   sync.Once
 	values []reflect.Value
 	err    error
-	val    chan []reflect.Value
+	valFn  func() []reflect.Value
 }
 
-func (v *futureValue) setErr(err error) *futureValue { v.err = err; v.val <- nil; return v }
+func (v *futureValue) setErr(err error) *futureValue { v.err = err; return v }
 func (v *futureValue) Raw() []reflect.Value          { return v.getVal() }
 func (v *futureValue) String() string                { return valueStr(v.getVal()...) }
 
@@ -38,7 +38,11 @@ func (v *futureValue) Err() error {
 }
 
 func (v *futureValue) getVal() []reflect.Value {
-	v.done.Do(func() { v.values = <-v.val })
+	v.done.Do(func() {
+		if v.valFn != nil {
+			v.values = v.valFn()
+		}
+	})
 	return v.values
 }
 
@@ -54,7 +58,7 @@ func (v *futureValue) Value(fn interface{}) (gErr error) {
 	return
 }
 
-func futureValueGet() *futureValue    { return &futureValue{val: make(chan []reflect.Value)} }
+func futureValueGet() *futureValue    { return &futureValue{} }
 func futureValuePut(val *futureValue) { _ = val }
 
 var _ xprocess_abc.Value = (*value)(nil)
