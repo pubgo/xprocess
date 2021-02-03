@@ -145,7 +145,7 @@ func Async(fn interface{}, args ...interface{}) (val1 xprocess_abc.FutureValue) 
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
 	var vfn = xutil.FuncRaw(fn)
-	var data = make(chan []reflect.Value)
+	var data = make(chan []reflect.Value, 1)
 	value.valFn = func() []reflect.Value { return <-data }
 	go func() {
 		defer xerror.Resp(func(err1 xerror.XErr) {
@@ -168,7 +168,7 @@ func Await(val xprocess_abc.FutureValue, fn interface{}) (val1 xprocess_abc.Futu
 	xerror.Assert(val == nil, "[val] should not be nil")
 	xerror.Assert(fn == nil, "[fn] should not be nil")
 
-	var data = make(chan []reflect.Value)
+	var data = make(chan []reflect.Value, 1)
 	value.valFn = func() []reflect.Value { return <-data }
 
 	var vfn = xutil.FuncValue(fn)
