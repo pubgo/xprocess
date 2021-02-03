@@ -44,6 +44,13 @@ func TestAsync(t *testing.T) {
 	assert.NotNil(t, a1Val.Get().(*a1))
 	assert.Equal(t, a1Val.Get().(*a1).a, 1)
 
+	a1Val = Await(Async(a1Test), func(a *a1) *a1 { a.a = 1; return nil })
+	assert.Nil(t, a1Val.Err())
+	assert.Nil(t, a1Val.Get())
+	assert.Nil(t, a1Val.Value(func(a *a1) {
+		fmt.Println("a", a, a == nil)
+	}))
+
 	a2Val := Await(Async(a2Test), func(a *a1) *a1 {
 		if a == nil {
 			return nil
@@ -97,9 +104,6 @@ func promise1() xprocess_abc.IPromise {
 
 func TestPromise(t *testing.T) {
 	p := promise1()
-	assert.Nil(t, p.RunComplete())
-
-	p = promise1()
 	heads := p.Map(func(resp *http.Response, err error) http.Header { return resp.Header })
 	assert.Nil(t, heads.Err())
 

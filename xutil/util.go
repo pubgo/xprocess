@@ -97,6 +97,7 @@ func Func(fn interface{}) func(...interface{}) func(...interface{}) {
 			if !ok {
 				cfn = reflect.ValueOf(fns[0])
 			}
+
 			xerror.Assert(!cfn.IsValid() || cfn.Kind() != reflect.Func || cfn.IsNil(),
 				"[fns] type error or nil")
 

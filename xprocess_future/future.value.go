@@ -21,10 +21,11 @@ type futureValue struct {
 	valFn  func() []reflect.Value
 }
 
-func (v *futureValue) Err() error                    { _ = v.getVal(); return v.err }
-func (v *futureValue) setErr(err error) *futureValue { v.err = err; return v }
-func (v *futureValue) Raw() []reflect.Value          { return v.getVal() }
-func (v *futureValue) String() string                { return valueStr(v.getVal()...) }
+func (v *futureValue) Assert(format string, a ...interface{}) { xerror.PanicF(v.Err(), format, a...) }
+func (v *futureValue) Err() error                             { _ = v.getVal(); return v.err }
+func (v *futureValue) setErr(err error) *futureValue          { v.err = err; return v }
+func (v *futureValue) Raw() []reflect.Value                   { return v.getVal() }
+func (v *futureValue) String() string                         { return valueStr(v.getVal()...) }
 
 func (v *futureValue) Get() interface{} {
 	val := v.getVal()
@@ -63,6 +64,6 @@ type value struct {
 	val interface{}
 }
 
-func (v *value) Err() error         { return v.err }
-func (v *value) String() string     { return "" }
-func (v *value) Value() interface{} { return v.val }
+func (v *value) Assert(format string, a ...interface{}) { xerror.PanicF(v.Err(), format, a...) }
+func (v *value) Err() error                             { return v.err }
+func (v *value) Value() interface{}                     { return v.val }

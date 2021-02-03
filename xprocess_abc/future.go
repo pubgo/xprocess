@@ -3,7 +3,6 @@ package xprocess_abc
 import "reflect"
 
 type IPromise interface {
-	RunComplete() error
 	Await() chan FutureValue
 	Map(fn interface{}) Value
 }
@@ -14,6 +13,7 @@ type Future interface {
 }
 
 type FutureValue interface {
+	Assert(format string, a ...interface{})
 	Err() error
 	String() string
 	Get() interface{}
@@ -22,7 +22,7 @@ type FutureValue interface {
 }
 
 type Value interface {
+	Assert(format string, a ...interface{})
 	Err() error
-	String() string
 	Value() interface{}
 }

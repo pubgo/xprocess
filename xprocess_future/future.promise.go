@@ -46,27 +46,18 @@ func (s *promise) yield(data interface{}) {
 		return
 	}
 
-	if data == nil {
-		s.wg.Inc()
-		go func() { s.data <- newFutureValue() }()
-		return
-	}
-
-	if val, ok := data.(func()); ok {
+	switch val := data.(type) {
+	case func():
 		s.Go(val)
-		return
-	}
-
-	if val, ok := data.(*futureValue); ok {
+	case *futureValue:
 		s.wg.Inc()
 		go func() { s.data <- val }()
-		return
+	default:
+		s.wg.Inc()
+		value := newFutureValue()
+		value.values = []reflect.Value{reflect.ValueOf(data)}
+		go func() { s.data <- value }()
 	}
-
-	s.wg.Inc()
-	value := newFutureValue()
-	value.values = []reflect.Value{reflect.ValueOf(data)}
-	go func() { s.data <- value }()
 }
 
 func (s *promise) await(val xprocess_abc.FutureValue, fn interface{}) {
@@ -76,22 +67,6 @@ func (s *promise) await(val xprocess_abc.FutureValue, fn interface{}) {
 	}
 
 	s.yield(Await(val, fn))
-}
-
-func (s *promise) RunComplete() (err error) {
-	s.waitForClose()
-
-	defer xerror.RespErr(&err)
-
-	var errs []error
-	for data := range s.Await() {
-		if err := data.Err(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	xerror.PanicErrs(errs...)
-	return nil
 }
 
 func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
@@ -111,31 +86,33 @@ func (s *promise) Map(fn interface{}) (val1 xprocess_abc.Value) {
 		values = append(values, Await(data, fn))
 	}
 
+	// 遇到未知错误
 	xerror.PanicErrs(errs...)
 
 	if len(values) == 0 {
 		return
 	}
 
-	var tfn = reflect.TypeOf(fn)
+	tfn := reflect.TypeOf(fn)
 
 	// fn没有输出
 	if tfn.NumOut() == 0 {
-		xerror.Panic(s.RunComplete())
+		return &value{}
 	}
 
 	var t = tfn.Out(0)
 	var rst = reflect.MakeSlice(reflect.SliceOf(t), 0, len(values))
 	for i := range values {
-		if err := values[i].Err(); err != nil {
-			errs = append(errs, err)
-			continue
+		val := values[i].Raw()[0]
+
+		if !val.IsValid() {
+			if t.Kind() == reflect.Ptr {
+				val = reflect.New(t).Elem()
+			} else {
+				val = reflect.Zero(t)
+			}
 		}
 
-		val := values[i].Raw()[0]
-		if !val.IsValid() {
-			val = reflect.Zero(t)
-		}
 		rst = reflect.Append(rst, val)
 	}
 	xerror.PanicErrs(errs...)
@@ -223,4 +200,18 @@ func valueStr(values ...reflect.Value) string {
 		data = append(data, val)
 	}
 	return fmt.Sprint(data...)
+}
+
+func RunComplete(values ...xprocess_abc.FutureValue) (err error) {
+	defer xerror.RespErr(&err)
+
+	var errs []error
+	for i := range values {
+		if err := values[i].Err(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	xerror.PanicErrs(errs...)
+	return nil
 }
